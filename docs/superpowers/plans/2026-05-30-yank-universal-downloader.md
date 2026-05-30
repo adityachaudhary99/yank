@@ -11,7 +11,7 @@
 **Reference spec:** `docs/design.md` (committed `be0ed17`).
 
 **Conventions used throughout this plan:**
-- **Module path:** `github.com/aditya/yank` — used verbatim in every import below. Before the M4 public release, rename to your real GitHub path with a single `go mod edit -module` + find/replace (called out in Task 27).
+- **Module path:** `github.com/adityachaudhary99/yank` — the real, final GitHub path; used verbatim in every import below. No rename needed (Task 27 is now just LICENSE + README).
 - **Dev host:** WSL `Ubuntu-24.04`, user `cal`, repo at `/home/cal/oss/yank` (verified via probe). All `~`-relative commands below resolve under `/home/cal`.
 - **Commit style:** Conventional Commits. Every commit message ends with the trailer:
   ```
@@ -91,9 +91,9 @@ curl -fsSL https://go.dev/dl/go1.22.12.linux-amd64.tar.gz | sudo tar -C /usr/loc
 
 Run:
 ```bash
-cd ~/oss/yank && go mod init github.com/aditya/yank
+cd ~/oss/yank && go mod init github.com/adityachaudhary99/yank
 ```
-Expected: creates `go.mod` with `module github.com/aditya/yank` and a `go 1.22` line.
+Expected: creates `go.mod` with `module github.com/adityachaudhary99/yank` and a `go 1.22` line.
 
 - [ ] **Step 3: Create the entrypoint**
 
@@ -104,7 +104,7 @@ package main
 import (
 	"os"
 
-	"github.com/aditya/yank/internal/cli"
+	"github.com/adityachaudhary99/yank/internal/cli"
 )
 
 // Build-time variables, overridden via -ldflags at release.
@@ -124,7 +124,7 @@ func main() {
 Create `Makefile`:
 ```makefile
 BINARY := yank
-PKG := github.com/aditya/yank
+PKG := github.com/adityachaudhary99/yank
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -840,7 +840,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aditya/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/progress"
 )
 
 func TestDownloadSingleStream(t *testing.T) {
@@ -921,7 +921,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/aditya/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/progress"
 )
 
 // Options configures a download.
@@ -1260,7 +1260,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aditya/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/progress"
 )
 
 func TestParallelDownloadMatchesContent(t *testing.T) {
@@ -1499,8 +1499,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/aditya/yank/internal/engine"
-	"github.com/aditya/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/engine"
+	"github.com/adityachaudhary99/yank/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -1616,7 +1616,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aditya/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/progress"
 )
 
 func TestDownloadVerifiesChecksum(t *testing.T) {
@@ -1670,7 +1670,7 @@ And in `Download`, after a successful transfer and before `opt.Sink.Finish(out)`
 		}
 	}
 ```
-Add the import `"github.com/aditya/yank/internal/checksum"` to the file.
+Add the import `"github.com/adityachaudhary99/yank/internal/checksum"` to the file.
 
 In `internal/cli/download.go`, add to `downloadFlags`:
 ```go
@@ -1722,7 +1722,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aditya/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/progress"
 )
 
 func TestResumeSingleStreamContinuesFromPart(t *testing.T) {
@@ -2091,7 +2091,7 @@ import (
 	"context"
 	"os/exec"
 
-	"github.com/aditya/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/classify"
 )
 
 // Request carries everything a backend needs to construct its command line.
@@ -2182,7 +2182,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aditya/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/classify"
 )
 
 func argvOf(t *testing.T, b Backend, raw, dir string) string {
@@ -2477,8 +2477,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aditya/yank/internal/backend"
-	"github.com/aditya/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/backend"
+	"github.com/adityachaudhary99/yank/internal/classify"
 )
 
 type fakeRunner struct {
@@ -2548,9 +2548,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aditya/yank/internal/backend"
-	"github.com/aditya/yank/internal/classify"
-	"github.com/aditya/yank/internal/doctor"
+	"github.com/adityachaudhary99/yank/internal/backend"
+	"github.com/adityachaudhary99/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/doctor"
 )
 
 // Request is the user-facing download request passed to a backend.
@@ -2662,11 +2662,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/aditya/yank/internal/backend"
-	"github.com/aditya/yank/internal/classify"
-	"github.com/aditya/yank/internal/engine"
-	"github.com/aditya/yank/internal/progress"
-	"github.com/aditya/yank/internal/route"
+	"github.com/adityachaudhary99/yank/internal/backend"
+	"github.com/adityachaudhary99/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/engine"
+	"github.com/adityachaudhary99/yank/internal/progress"
+	"github.com/adityachaudhary99/yank/internal/route"
 	"github.com/spf13/cobra"
 )
 
@@ -2826,7 +2826,7 @@ package cli
 import (
 	"os/exec"
 
-	"github.com/aditya/yank/internal/doctor"
+	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/spf13/cobra"
 )
 
@@ -2912,7 +2912,7 @@ Create `internal/cli/installdeps.go`:
 package cli
 
 import (
-	"github.com/aditya/yank/internal/doctor"
+	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/spf13/cobra"
 )
 
@@ -3173,7 +3173,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	return root
 }
 ```
-Add import `"github.com/aditya/yank/internal/config"`.
+Add import `"github.com/adityachaudhary99/yank/internal/config"`.
 
 - [ ] **Step 4: Run tests**
 
@@ -3292,7 +3292,7 @@ and in `nativeGet`, build headers:
 		return err
 	}
 ```
-pass `Headers: hdr` into `engine.Options`. Add import `"github.com/aditya/yank/internal/auth"`.
+pass `Headers: hdr` into `engine.Options`. Add import `"github.com/adityachaudhary99/yank/internal/auth"`.
 
 - [ ] **Step 4: Run tests + smoke**
 
@@ -3791,24 +3791,21 @@ git add internal/cli && git commit -m "$(printf 'feat(cli): add --no-parallel, -
 
 # Phase M4 — Release engineering
 
-### Task 27: Finalize module path + README + LICENSE
+### Task 27: LICENSE + README
 
 **Files:**
-- Modify: `go.mod` and all imports (module rename)
 - Create: `LICENSE`
 - Rewrite: `README.md`
 
-- [ ] **Step 1: Decide and set the real module path**
+- [ ] **Step 1: Confirm the module path is final**
 
-Pick the public GitHub path (example `github.com/aditya/yank` is already used; if your real handle differs, run):
+The module path `github.com/adityachaudhary99/yank` was set in Task 2 and is the
+real GitHub repo, so no rename is needed. Just verify the tree is consistent:
 ```bash
-OLD=github.com/aditya/yank
-NEW=github.com/<your-gh-user>/yank
-go mod edit -module "$NEW"
-grep -rl "$OLD" --include='*.go' . | xargs sed -i "s#$OLD#$NEW#g"
 go build ./... && go test ./...
+test -z "$(grep -rl 'github.com/aditya/yank' --include='*.go' . || true)" && echo "module-path-ok"
 ```
-Expected: build + tests still pass. If `<your-gh-user>` equals `aditya`, this is a no-op.
+Expected: build + tests pass; prints `module-path-ok` (no stale import paths).
 
 - [ ] **Step 2: Add a LICENSE**
 
@@ -3895,7 +3892,7 @@ nfpms:
   - id: deb
     package_name: yank
     formats: [deb]
-    maintainer: "Aditya Chaudhary <gungunpandey8118@gmail.com>"
+    maintainer: "Aditya Chaudhary <adityaachaudhary2003@gmail.com>"
     description: "One universal download command for the Linux CLI."
     license: MIT
     bindir: /usr/bin
@@ -3903,16 +3900,16 @@ nfpms:
 brews:
   - name: yank
     repository:
-      owner: aditya
+      owner: adityachaudhary99
       name: homebrew-tap
-    homepage: "https://github.com/aditya/yank"
+    homepage: "https://github.com/adityachaudhary99/yank"
     description: "One universal download command"
     license: MIT
 aurs:
   - name: yank-bin
-    homepage: "https://github.com/aditya/yank"
+    homepage: "https://github.com/adityachaudhary99/yank"
     description: "One universal download command"
-    maintainers: ["Aditya Chaudhary <gungunpandey8118@gmail.com>"]
+    maintainers: ["Aditya Chaudhary <adityaachaudhary2003@gmail.com>"]
     license: MIT
     git_url: "ssh://aur@aur.archlinux.org/yank-bin.git"
     package: |-
@@ -3923,10 +3920,10 @@ changelog:
     exclude: ["^docs:", "^test:", "^chore:"]
 release:
   github:
-    owner: aditya
+    owner: adityachaudhary99
     name: yank
 ```
-> Replace `aditya`/`homebrew-tap` owners with your real GitHub once Task 27 sets the module path. The `brews`/`aurs` blocks require the tap repo and AUR SSH key to exist; they no-op on `--snapshot`.
+> The `brews`/`aurs` blocks require a `homebrew-tap` repo under `adityachaudhary99` and an AUR SSH key to exist; they no-op on `--snapshot`, so local validation works without them.
 
 - [ ] **Step 3: Validate locally (no publish)**
 
@@ -3987,7 +3984,7 @@ Create `install.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="aditya/yank"     # set to your GitHub owner/repo
+REPO="adityachaudhary99/yank"     # set to your GitHub owner/repo
 BINARY="yank"
 
 detect_arch() {
@@ -4185,7 +4182,7 @@ Expected: tag `v0.1.0` created. Pushing the tag triggers `.github/workflows/rele
 
 After pushing, confirm the Actions run is green and the release page lists: linux/darwin × amd64/arm64 archives, `.deb`, `checksums.txt`. Test the installer:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aditya/yank/main/install.sh | bash && yank version
+curl -fsSL https://raw.githubusercontent.com/adityachaudhary99/yank/main/install.sh | bash && yank version
 ```
 Expected: installs and prints the version.
 
@@ -4233,7 +4230,7 @@ yank/
 | §8 Output/exit codes | 5, 24, 25 |
 | §9 Project structure | all (see Appendix A) |
 | §10 Testing strategy | every task (TDD) |
-| §11 Distribution | 27–32 |
+| §11 Distribution | 27–32 (module path is final from Task 2; no rename) |
 | §12 Dev env | 1, 2 |
 | §13 Milestones | phase headers |
 
