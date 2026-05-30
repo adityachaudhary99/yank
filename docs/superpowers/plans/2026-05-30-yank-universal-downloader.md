@@ -1701,7 +1701,178 @@ Expected: PASS.
 git add internal/engine internal/cli && git commit -m "$(printf 'feat: verify downloads against --checksum/--sha256\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
-**🎯 M1 complete:** `yank <http-url>` downloads with parallelism, resume scaffolding, retries, and checksum verification.
+### Task 12b: Engine — resume single-stream downloads from a partial `.part`
+
+**Files:**
+- Modify: `internal/engine/download.go` (`downloadSingle`: detect + continue from partial)
+- Test: `internal/engine/resume_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `internal/engine/resume_test.go`:
+```go
+package engine
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/aditya/yank/internal/progress"
+)
+
+func TestResumeSingleStreamContinuesFromPart(t *testing.T) {
+	body := []byte("0123456789abcdefghij") // 20 bytes
+	const have = 8
+	servedRangeFrom := int64(-1)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		if r.Method == http.MethodHead {
+			return
+		}
+		rng := r.Header.Get("Range")
+		if rng == "" {
+			w.Write(body)
+			return
+		}
+		var start int64
+		fmt.Sscanf(rng, "bytes=%d-", &start)
+		servedRangeFrom = start
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, len(body)-1, len(body)))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(body[start:])
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	out := filepath.Join(dir, "f.bin")
+	// Pre-seed a partial .part and a compatible resume state.
+	if err := os.WriteFile(out+".part", body[:have], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	(&State{URL: srv.URL, Validator: `"v1"`, Total: int64(len(body))}).Save(out)
+
+	if _, err := Download(context.Background(), Options{
+		URL: srv.URL, OutputPath: out, Connections: 1, Retries: 1,
+		Client: srv.Client(), Sink: progress.NewSilent(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	if string(got) != string(body) {
+		t.Fatalf("content = %q", got)
+	}
+	if servedRangeFrom != have {
+		t.Fatalf("expected resume from byte %d, server served from %d", have, servedRangeFrom)
+	}
+	if _, err := os.Stat(out + ".yank-state.json"); !os.IsNotExist(err) {
+		t.Fatal("state file should be cleared after success")
+	}
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `go test ./internal/engine/ -run TestResumeSingleStream -v`
+Expected: FAIL — current `downloadSingle` truncates and refetches from byte 0, so `servedRangeFrom` stays `-1`.
+
+- [ ] **Step 3: Replace `downloadSingle` with a resume-aware version**
+
+In `internal/engine/download.go`, replace the entire `downloadSingle` function with:
+```go
+// downloadSingle streams the body to a .part file (resuming from an existing
+// partial when a compatible state is present) then renames atomically.
+func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (int64, error) {
+	part := out + ".part"
+
+	// Decide whether we can resume from an existing partial.
+	var offset int64
+	if st, _ := LoadState(out); st.Compatible(meta) && meta.SupportsRanges {
+		if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
+			offset = fi.Size()
+		}
+	}
+
+	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	if offset == 0 {
+		if err := f.Truncate(0); err != nil {
+			return 0, err
+		}
+	}
+	// Persist resume metadata up front so an interruption mid-transfer resumes.
+	(&State{URL: opt.URL, Validator: meta.Validator, Total: meta.Size}).Save(out)
+
+	written := offset
+	err = withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, opt.URL, nil)
+		if rerr != nil {
+			return rerr
+		}
+		applyHeaders(req, opt.Headers)
+		if offset > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+		}
+		resp, rerr := opt.Client.Do(req)
+		if rerr != nil {
+			return rerr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			return fmt.Errorf("server returned %s", resp.Status)
+		}
+		// Asked for a range but got a full 200: server ignored it, restart at 0.
+		if offset > 0 && resp.StatusCode == http.StatusOK {
+			offset = 0
+		}
+		if _, serr := f.Seek(offset, io.SeekStart); serr != nil {
+			return serr
+		}
+		if terr := f.Truncate(offset); terr != nil {
+			return terr
+		}
+		cw := &countingWriter{w: f, n: offset, total: meta.Size, sink: opt.Sink}
+		_, cerr := io.Copy(cw, resp.Body)
+		written = cw.n
+		return cerr
+	})
+	if err != nil {
+		return 0, err
+	}
+	if err := f.Close(); err != nil {
+		return 0, err
+	}
+	if err := os.Rename(part, out); err != nil {
+		return 0, err
+	}
+	clearState(out)
+	return written, nil
+}
+```
+> This relies on `State`/`LoadState`/`clearState` (Task 9) and `countingWriter` (Task 8). No new imports beyond `io`, `fmt`, `time`, `net/http`, `os` already used in the file.
+
+- [ ] **Step 4: Run the full engine suite**
+
+Run: `go test ./internal/engine/ -race -v`
+Expected: PASS — resume test plus all earlier engine tests (single, parallel, checksum, state, retry, probe, filename).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/engine && git commit -m "$(printf 'feat(engine): resume single-stream downloads from partial .part\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+**🎯 M1 complete:** `yank <http-url>` downloads with parallelism, working single-stream resume, retries, and checksum verification.
 
 ---
 
@@ -3515,7 +3686,106 @@ Expected: PASS; bash script prints; `yank.1` man pages generated.
 git add internal/cli go.mod go.sum && git commit -m "$(printf 'feat(cli): shell completions and man page generation\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
-**🎯 M3 complete:** config precedence, auth, JSON mode, multi-URL + exit codes, completions, and man pages.
+### Task 26b: Transfer-control flags (`--no-parallel`, `--timeout`, `--insecure`)
+
+**Files:**
+- Modify: `internal/cli/download.go` (`downloadFlags` + `nativeGet` build a client)
+- Modify: `internal/cli/root.go` (register the three flags)
+- Test: `internal/cli/transfer_flags_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `internal/cli/transfer_flags_test.go`:
+```go
+package cli
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestInsecureFlagAllowsSelfSignedTLS(t *testing.T) {
+	body := []byte("secure-ish payload")
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(body)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+
+	// Without --insecure: untrusted self-signed cert must fail.
+	r1 := NewRootCmd(BuildInfo{Version: "t"})
+	r1.SetArgs([]string{"-q", "-o", filepath.Join(dir, "a"), srv.URL})
+	if err := r1.Execute(); err == nil {
+		t.Fatal("expected TLS verification failure without --insecure")
+	}
+
+	// With --insecure: must succeed and write the body.
+	r2 := NewRootCmd(BuildInfo{Version: "t"})
+	r2.SetArgs([]string{"-q", "--insecure", "-o", filepath.Join(dir, "b"), srv.URL})
+	if err := r2.Execute(); err != nil {
+		t.Fatalf("expected success with --insecure: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "b"))
+	if string(got) != string(body) {
+		t.Fatalf("content = %q", got)
+	}
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `go test ./internal/cli/ -run TestInsecureFlag -v`
+Expected: FAIL — no `--insecure` flag; the second run errors on the untrusted cert.
+
+- [ ] **Step 3: Write minimal implementation**
+
+In `internal/cli/download.go`, add fields to `downloadFlags`:
+```go
+	noParallel bool
+	timeout    time.Duration
+	insecure   bool
+```
+Add imports `"crypto/tls"`, `"net/http"` (already present), and `"time"` to the file.
+
+In `nativeGet`, build a client from the flags and apply `--no-parallel` before constructing `engine.Options`:
+```go
+	client := http.DefaultClient
+	if f.insecure || f.timeout > 0 {
+		tr := &http.Transport{}
+		if f.insecure {
+			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
+		client = &http.Client{Transport: tr, Timeout: f.timeout}
+	}
+	conns := f.connections
+	if f.noParallel {
+		conns = 1
+	}
+```
+Then in the `engine.Options{...}` literal set `Connections: conns` (replacing `f.connections`) and add `Client: client`.
+
+In `internal/cli/root.go`, register the flags in the Flags block:
+```go
+	pf.BoolVar(&f.noParallel, "no-parallel", false, "force a single connection")
+	pf.DurationVar(&f.timeout, "timeout", 0, "overall HTTP timeout (e.g. 30s); 0 = none")
+	pf.BoolVar(&f.insecure, "insecure", false, "skip TLS certificate verification")
+```
+
+- [ ] **Step 4: Run tests + smoke**
+
+Run: `go test ./internal/cli/ -v && make build && ./yank --no-parallel --timeout 30s https://raw.githubusercontent.com/git/git/master/README.md -o /tmp/r.md -f && echo ok`
+Expected: tests PASS; single-connection download completes.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/cli && git commit -m "$(printf 'feat(cli): add --no-parallel, --timeout, --insecure transfer flags\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+**🎯 M3 complete:** config precedence, auth, JSON mode, multi-URL + exit codes, transfer-control flags, completions, and man pages.
 
 ---
 
@@ -3956,9 +4226,9 @@ yank/
 |---|---|
 | §2 Hybrid architecture | 6–12 (engine), 13–18 (dispatch) |
 | §3 Classification/routing | 13, 17, 18 |
-| §4 Native engine (parallel/resume/retry/checksum/filenames/auth) | 6–12, 23 |
+| §4 Native engine (parallel/resume/retry/checksum/filenames/auth) | 6–12, 12b (resume), 23, 26b |
 | §5 Dispatch backends + missing-tool UX | 14–17 |
-| §6 CLI surface | 11, 18, 19, 20, 26 |
+| §6 CLI surface | 11, 18, 19, 20, 26, 26b |
 | §7 Configuration | 21, 22 |
 | §8 Output/exit codes | 5, 24, 25 |
 | §9 Project structure | all (see Appendix A) |
@@ -3966,4 +4236,11 @@ yank/
 | §11 Distribution | 27–32 |
 | §12 Dev env | 1, 2 |
 | §13 Milestones | phase headers |
+
+**Deferred to v0.2 (tracked, intentionally out of this plan):** `--netrc`,
+`--limit-rate`, `--max-redirs`, `-v/--verbose`, `--no-color`, and the
+`yank config` subcommand (spec §6). Per-chunk parallel resume is also v0.2; v1
+resumes the single-stream path (Task 12b) and cleanly restarts an interrupted
+parallel download. These match the "Deferred to v0.2" note in `docs/design.md`
+§6 — spec and plan agree.
 ```

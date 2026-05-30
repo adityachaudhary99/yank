@@ -115,9 +115,12 @@ The heart of the tool and the main differentiator.
   threshold (default 1 MiB) and connections > 1, split into N ranges fetched
   concurrently (default `-x 8`). Otherwise single stream.
 - **Resume** — write to `<name>.part` plus a sidecar `<name>.yank-state.json`
-  recording URL, ETag/Last-Modified, total size, and per-chunk progress. On
-  re-run, validate the validator and continue; if the validator changed,
-  restart cleanly.
+  recording URL, ETag/Last-Modified, and total size. On re-run, validate the
+  validator and continue from the partial bytes; if the validator changed,
+  restart cleanly. v1 resumes the single-stream path (the common interrupted-
+  large-file case) via a `Range: bytes=<have>-` request; an interrupted
+  parallel download whose validator still matches restarts cleanly (per-chunk
+  parallel resume is a v0.2 enhancement).
 - **Retries** — per-chunk, exponential backoff with jitter (default 5 retries),
   retry on connection errors and 5xx/429 (honoring `Retry-After`).
 - **Redirects** — followed by default (configurable `--max-redirs`), closing the
@@ -139,13 +142,18 @@ A small interface keeps backends uniform and testable:
 
 ```go
 type Backend interface {
-    Name() string
-    CanHandle(s *classify.Source) bool
-    RequiredTools() []Tool                 // for doctor & missing-tool hints
-    Build(req *Request) (*exec.Cmd, error) // construct the delegated command
-    Parse(line string) (*Progress, bool)   // map backend output → unified progress
+    Name() string                                 // route key: git, yt-dlp, aria2c, curl, rclone
+    Tool() string                                 // required executable, for doctor & hints
+    Build(req Request) (argv []string, err error) // the delegated command to run
 }
 ```
+
+Classification lives in the `classify` package (not a per-backend `CanHandle`),
+and `Build` returns `argv` (not a built `*exec.Cmd`) so command construction is
+asserted in tests without executing anything. A `Runner` abstraction
+(`LookPath`+`Run`) handles tool detection and execution; in v1 a backend's
+child process streams its own stdout/stderr for progress rather than yank
+re-parsing it.
 
 | Backend | Tool | v1 behavior |
 |---------|------|-------------|
@@ -174,7 +182,6 @@ tailors the hint.
 yank [flags] <url> [<url> ...]      # download (default verb)
 yank doctor                          # report installed/missing backends + how to install
 yank install-deps [backend...]       # install missing backends via detected pkg manager
-yank config [get|set|path]           # manage config
 yank completion [bash|zsh|fish]      # shell completions
 yank version
 ```
@@ -191,13 +198,19 @@ yank version
 | `-r, --retries <n>` | retry count (default 5) |
 | `--sha256 / --md5 / --checksum` | verify integrity |
 | `-H, --header k:v` | add header (repeatable) |
-| `-u user:pass` / `--bearer t` / `--netrc` | auth |
+| `-u user:pass` / `--bearer t` | auth |
 | `--backend <auto\|native\|curl\|rclone\|git\|yt-dlp\|aria2c>` | force route |
 | `--dry-run` | classify + show command, don't run |
-| `-q/--quiet`, `-v/--verbose`, `--json`, `--no-color` | output control |
+| `-q/--quiet`, `--json` | output control |
 | `-f, --force` | overwrite existing |
-| `--limit-rate`, `--timeout`, `--max-redirs`, `--insecure` | transfer control |
+| `--timeout`, `--insecure` | transfer control |
 | `-- <args>` | passthrough to the delegated backend |
+
+**Deferred to v0.2 (not in v1):** `--netrc`, `--limit-rate`, `--max-redirs`,
+`-v/--verbose`, `--no-color`, and the `yank config` subcommand. Config in v1 is
+file + env (`~/.config/yank/config.toml`, `YANK_*`); editing it is manual until
+the `config` subcommand lands. These are intentionally scoped out to keep v1
+focused; none change the architecture or interfaces.
 
 **Examples**
 
