@@ -1,0 +1,17 @@
+name: yank
+base: core22
+version: git
+summary: One universal download command
+description: |
+  yank downloads from anywhere: HTTP(S) files, cloud storage, git repos,
+  media sites, and torrents, behind one consistent CLI.
+grade: stable
+confinement: classic
+parts:
+  yank:
+    plugin: go
+    source: .
+    build-snaps: [go/1.22/stable]
+apps:
+  yank:
+    command: bin/yank
