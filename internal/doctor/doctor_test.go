@@ -28,3 +28,18 @@ func TestInstallHintFormatsForManager(t *testing.T) {
 		t.Fatal("pacman hint wrong")
 	}
 }
+
+func TestInstallHintApk(t *testing.T) {
+	if got := InstallHint("git", "apk"); got != "sudo apk add git" {
+		t.Fatalf("apk hint = %q", got)
+	}
+}
+
+func TestResolveManagerPrecedence(t *testing.T) {
+	if ResolveManager("apt", "dnf") != "dnf" {
+		t.Fatal("flag should win over config")
+	}
+	if ResolveManager("apt", "") != "apt" {
+		t.Fatal("config should apply when no flag")
+	}
+}

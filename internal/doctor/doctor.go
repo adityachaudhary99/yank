@@ -17,12 +17,24 @@ func Check(tools []string, look func(string) (string, error)) map[string]bool {
 
 // DetectManager returns the host package manager name, or "" if unknown.
 func DetectManager() string {
-	for _, m := range []string{"apt", "dnf", "pacman", "brew", "zypper"} {
+	for _, m := range []string{"apt", "dnf", "pacman", "zypper", "apk", "brew"} {
 		if _, err := exec.LookPath(m); err == nil {
 			return m
 		}
 	}
 	return ""
+}
+
+// ResolveManager picks the package manager to use: an explicit flag wins, then a
+// remembered config value, then live detection. Returns "" when none is known.
+func ResolveManager(configPM, flagPM string) string {
+	if flagPM != "" {
+		return flagPM
+	}
+	if configPM != "" {
+		return configPM
+	}
+	return DetectManager()
 }
 
 // InstallHint returns a copy-pasteable install command for tool under manager.
@@ -36,6 +48,8 @@ func InstallHint(tool, manager string) string {
 		return "sudo pacman -S " + tool
 	case "zypper":
 		return "sudo zypper install " + tool
+	case "apk":
+		return "sudo apk add " + tool
 	case "brew":
 		return "brew install " + tool
 	default:

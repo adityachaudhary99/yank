@@ -10,12 +10,13 @@ import (
 
 // Config holds user-tunable defaults.
 type Config struct {
-	Connections int    `toml:"connections"`
-	Retries     int    `toml:"retries"`
-	Dir         string `toml:"dir"`
-	LimitRate   string `toml:"limit_rate"`
-	Color       bool   `toml:"color"`
-	Theme       string `toml:"theme"`
+	Connections    int    `toml:"connections"`
+	Retries        int    `toml:"retries"`
+	Dir            string `toml:"dir"`
+	LimitRate      string `toml:"limit_rate"`
+	Color          bool   `toml:"color"`
+	Theme          string `toml:"theme"`
+	PackageManager string `toml:"package_manager"`
 }
 
 func Defaults() Config {
@@ -34,6 +35,21 @@ func Path() string {
 
 // Load reads the standard config path; missing file yields defaults.
 func Load() (Config, error) { return loadFrom(Path()) }
+
+// Save writes c to the standard config path, creating parent directories.
+func Save(c Config) error { return saveTo(Path(), c) }
+
+func saveTo(path string, c Config) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(c)
+}
 
 func loadFrom(path string) (Config, error) {
 	c := Defaults()

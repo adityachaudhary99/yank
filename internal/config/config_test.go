@@ -37,6 +37,22 @@ func TestDefaultsWhenNoFile(t *testing.T) {
 	}
 }
 
+func TestPackageManagerRoundTrips(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	c := Defaults()
+	c.PackageManager = "apk"
+	if err := saveTo(p, c); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadFrom(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PackageManager != "apk" {
+		t.Fatalf("package_manager = %q after round-trip", got.PackageManager)
+	}
+}
+
 func TestThemePrecedence(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.toml")
