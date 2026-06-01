@@ -3,8 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net/http"
 
+	"github.com/adityachaudhary99/yank/internal/auth"
 	"github.com/adityachaudhary99/yank/internal/backend"
 	"github.com/adityachaudhary99/yank/internal/classify"
 	"github.com/adityachaudhary99/yank/internal/engine"
@@ -23,6 +23,9 @@ type downloadFlags struct {
 	checksum    string
 	backend     string
 	dryRun      bool
+	headers     []string
+	basic       string
+	bearer      string
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
@@ -67,10 +70,14 @@ func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
 	if v, _ := cmd.Flags().GetString("sha256"); v != "" {
 		sum = "sha256:" + v
 	}
-	_, err := engine.Download(context.Background(), engine.Options{
+	hdr, err := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: f.basic, Bearer: f.bearer})
+	if err != nil {
+		return err
+	}
+	_, err = engine.Download(context.Background(), engine.Options{
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
 		Connections: f.connections, Retries: f.retries, Force: f.force,
-		Headers: http.Header{}, Sink: sink, Checksum: sum,
+		Headers: hdr, Sink: sink, Checksum: sum,
 	})
 	return err
 }

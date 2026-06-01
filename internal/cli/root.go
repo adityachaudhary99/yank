@@ -44,6 +44,9 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.String("sha256", "", "shorthand for --checksum sha256:<hex>")
 	pf.StringVar(&f.backend, "backend", "auto", "force backend: auto|native|curl|rclone|git|yt-dlp|aria2c")
 	pf.BoolVar(&f.dryRun, "dry-run", false, "show classification and command without downloading")
+	pf.StringArrayVarP(&f.headers, "header", "H", nil, "add request header (repeatable)")
+	pf.StringVarP(&f.basic, "user", "u", "", "basic auth user:pass")
+	pf.StringVar(&f.bearer, "bearer", "", "bearer token")
 
 	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd())
 	return root
