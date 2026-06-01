@@ -6,27 +6,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BuildInfo carries version metadata injected at build time.
 type BuildInfo struct {
 	Version string
 	Commit  string
 	Date    string
 }
 
-// NewRootCmd builds the root command tree.
 func NewRootCmd(b BuildInfo) *cobra.Command {
+	f := &downloadFlags{}
 	root := &cobra.Command{
-		Use:           "yank",
+		Use:           "yank [flags] <url>...",
 		Short:         "One universal download command",
 		Long:          "yank downloads from anywhere: HTTP(S) files, cloud storage, git repos, media sites, and torrents.",
+		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return runDownload(cmd, f, args)
+		},
 	}
+	pf := root.Flags()
+	pf.StringVarP(&f.output, "output", "o", "", "output file path")
+	pf.StringVarP(&f.dir, "dir", "d", ".", "output directory")
+	pf.IntVarP(&f.connections, "connections", "x", 8, "parallel connections")
+	pf.IntVarP(&f.retries, "retries", "r", 5, "retry attempts")
+	pf.BoolVarP(&f.force, "force", "f", false, "overwrite existing files")
+	pf.BoolVarP(&f.quiet, "quiet", "q", false, "suppress progress output")
+
 	root.AddCommand(newVersionCmd(b))
 	return root
 }
 
-// Execute runs the CLI and returns a process exit code.
 func Execute(b BuildInfo) int {
 	if err := NewRootCmd(b).Execute(); err != nil {
 		fmt.Println("yank:", err)
