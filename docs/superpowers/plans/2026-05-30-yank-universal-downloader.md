@@ -30,9 +30,14 @@
 | **M2 Classify + dispatch** | 13–20 | git/yt-dlp/aria2c/rclone/curl routing, `doctor`, `--dry-run` |
 | **M3 Polish** | 21–26 | config, auth, `--json`, multi-URL, completions, man page |
 | **M4 Release** | 27–32 | GoReleaser, install.sh, .deb, Snap, Homebrew, AUR, docs → `v0.1.0` |
-| **M5 CLI experience** | 33–39 | Themed UI (`internal/ui`, four themes, ASCII-default) + dependency detect/offer-to-install + remembered package manager (design.md §15) |
+| **M5 CLI experience** ✅ | 33–39 | Themed UI (`internal/ui`, four themes, ASCII-default) + dependency detect/offer-to-install + remembered package manager (design.md §15) |
 
 Each phase ends with working, testable software.
+
+> **Status (2026-06-01):** M0–M3 + M5 implemented and green (11 test packages,
+> `-race` clean, vet + gofmt clean). M4 release engineering is prepped (27–31);
+> only **Task 32 (cut `v0.1.0`)** remains — deferred to the launch moment, now
+> shipping *with* the M5 themed UI.
 
 ---
 
