@@ -1,0 +1,32 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # AUR_KEY / HOMEBREW_TAP_TOKEN added once those repos exist.
+  snap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snapcore/action-build@v1
+        id: build
+      # Publishing to the Snap Store requires SNAPCRAFT_STORE_CREDENTIALS;
+      # uncomment when configured:
+      # - uses: snapcore/action-publish@v1
+      #   env: { SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }} }
+      #   with: { snap: ${{ steps.build.outputs.snap }}, release: stable }
