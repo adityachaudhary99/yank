@@ -35,6 +35,8 @@ func NewRootCmd(b BuildInfo) *cobra.Command {
 	pf.IntVarP(&f.retries, "retries", "r", 5, "retry attempts")
 	pf.BoolVarP(&f.force, "force", "f", false, "overwrite existing files")
 	pf.BoolVarP(&f.quiet, "quiet", "q", false, "suppress progress output")
+	pf.StringVar(&f.checksum, "checksum", "", "verify download: algo:hex (e.g. sha256:...)")
+	pf.String("sha256", "", "shorthand for --checksum sha256:<hex>")
 
 	root.AddCommand(newVersionCmd(b))
 	return root

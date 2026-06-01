@@ -16,12 +16,17 @@ type downloadFlags struct {
 	retries     int
 	force       bool
 	quiet       bool
+	checksum    string
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, urls []string) error {
 	var sink progress.Sink = progress.NewTTY(cmd.OutOrStdout(), "download")
 	if f.quiet {
 		sink = progress.NewSilent()
+	}
+	sum := f.checksum
+	if v, _ := cmd.Flags().GetString("sha256"); v != "" {
+		sum = "sha256:" + v
 	}
 	_, err := engine.Download(context.Background(), engine.Options{
 		URL:         urls[0],
@@ -32,6 +37,7 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, urls []string) error {
 		Force:       f.force,
 		Headers:     http.Header{},
 		Sink:        sink,
+		Checksum:    sum,
 	})
 	return err
 }

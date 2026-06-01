@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/adityachaudhary99/yank/internal/checksum"
 	"github.com/adityachaudhary99/yank/internal/progress"
 )
 
@@ -23,6 +24,7 @@ type Options struct {
 	Headers     http.Header
 	Client      *http.Client
 	Sink        progress.Sink
+	Checksum    string // "algo:hex"; empty to skip
 }
 
 // Result reports what was downloaded.
@@ -70,6 +72,17 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	if err != nil {
 		opt.Sink.Error(err)
 		return nil, err
+	}
+	if opt.Checksum != "" {
+		algo, want, perr := checksum.Parse(opt.Checksum)
+		if perr != nil {
+			return nil, perr
+		}
+		if verr := checksum.VerifyFile(out, algo, want); verr != nil {
+			_ = os.Remove(out) // don't leave a corrupt file in place
+			opt.Sink.Error(verr)
+			return nil, verr
+		}
 	}
 	opt.Sink.Finish(out)
 	return &Result{Path: out, Bytes: n}, nil
