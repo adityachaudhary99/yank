@@ -14,5 +14,6 @@ var (
 )
 
 func main() {
-	os.Exit(cli.Execute(cli.BuildInfo{Version: version, Commit: commit, Date: date}))
+	code := cli.Execute(cli.BuildInfo{Version: version, Commit: commit, Date: date})
+	os.Exit(code)
 }

@@ -34,6 +34,7 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
+	var failures int
 	for _, raw := range urls {
 		src := classify.Classify(raw)
 		if f.backend != "" && f.backend != "auto" {
@@ -46,18 +47,26 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 			printPlan(cmd, src, passthrough)
 			continue
 		}
+		var err error
 		if src.Backend == "native" {
-			if err := nativeGet(cmd, f, raw); err != nil {
-				return err
-			}
+			err = nativeGet(cmd, f, raw)
+		} else {
+			r := route.New(backend.DefaultRegistry(), backend.ExecRunner{})
+			err = r.Dispatch(context.Background(), src, route.Request{
+				OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
+			})
+		}
+		if err != nil {
+			cmd.PrintErrln("yank:", err)
+			failures++
 			continue
 		}
-		r := route.New(backend.DefaultRegistry(), backend.ExecRunner{})
-		if err := r.Dispatch(context.Background(), src, route.Request{
-			OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
-		}); err != nil {
-			return err
-		}
+	}
+	if failures > 0 && failures < len(urls) {
+		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(urls)))
+	}
+	if failures == len(urls) {
+		return withCode(ExitGeneric, fmt.Errorf("all downloads failed"))
 	}
 	return nil
 }
@@ -109,5 +118,3 @@ func splitPassthrough(cmd *cobra.Command, args []string) (urls, passthrough []st
 	}
 	return args, nil
 }
-
-var _ = fmt.Sprintf // keep fmt imported if trimmed

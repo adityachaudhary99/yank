@@ -54,9 +54,9 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 }
 
 func Execute(b BuildInfo) int {
-	if err := NewRootCmd(b).Execute(); err != nil {
+	err := NewRootCmd(b).Execute()
+	if err != nil {
 		fmt.Println("yank:", err)
-		return 1
 	}
-	return 0
+	return ExitCodeFor(err)
 }
