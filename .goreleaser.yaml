@@ -1,0 +1,54 @@
+version: 2
+project_name: yank
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: yank
+    main: ./cmd/yank
+    binary: yank
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: "checksums.txt"
+nfpms:
+  - id: deb
+    package_name: yank
+    formats: [deb]
+    maintainer: "Aditya Chaudhary <adityaachaudhary2003@gmail.com>"
+    description: "One universal download command for the Linux CLI."
+    license: MIT
+    bindir: /usr/bin
+    recommends: [git, curl, aria2, yt-dlp, rclone]
+brews:
+  - name: yank
+    repository:
+      owner: adityachaudhary99
+      name: homebrew-tap
+    homepage: "https://github.com/adityachaudhary99/yank"
+    description: "One universal download command"
+    license: MIT
+aurs:
+  - name: yank-bin
+    homepage: "https://github.com/adityachaudhary99/yank"
+    description: "One universal download command"
+    maintainers: ["Aditya Chaudhary <adityaachaudhary2003@gmail.com>"]
+    license: MIT
+    git_url: "ssh://aur@aur.archlinux.org/yank-bin.git"
+    package: |-
+      install -Dm755 "./yank" "${pkgdir}/usr/bin/yank"
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:"]
+release:
+  github:
+    owner: adityachaudhary99
+    name: yank
