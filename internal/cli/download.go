@@ -26,6 +26,7 @@ type downloadFlags struct {
 	headers     []string
 	basic       string
 	bearer      string
+	jsonOut     bool
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
@@ -62,9 +63,14 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 }
 
 func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
-	var sink progress.Sink = progress.NewTTY(cmd.OutOrStdout(), "download")
-	if f.quiet {
+	var sink progress.Sink
+	switch {
+	case f.jsonOut:
+		sink = progress.NewJSON(cmd.OutOrStdout(), "download")
+	case f.quiet:
 		sink = progress.NewSilent()
+	default:
+		sink = progress.NewTTY(cmd.OutOrStdout(), "download")
 	}
 	sum := f.checksum
 	if v, _ := cmd.Flags().GetString("sha256"); v != "" {

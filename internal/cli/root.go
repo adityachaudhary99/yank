@@ -47,6 +47,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringArrayVarP(&f.headers, "header", "H", nil, "add request header (repeatable)")
 	pf.StringVarP(&f.basic, "user", "u", "", "basic auth user:pass")
 	pf.StringVar(&f.bearer, "bearer", "", "bearer token")
+	pf.BoolVar(&f.jsonOut, "json", false, "emit newline-delimited JSON progress")
 
 	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd())
 	return root
