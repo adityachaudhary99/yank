@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -13,7 +14,11 @@ type BuildInfo struct {
 }
 
 func NewRootCmd(b BuildInfo) *cobra.Command {
-	f := &downloadFlags{}
+	return newRootCmdWithFlags(b, &downloadFlags{})
+}
+
+func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
+	cfg, _ := config.Load() // defaults if missing
 	root := &cobra.Command{
 		Use:           "yank [flags] <url>...",
 		Short:         "One universal download command",
@@ -30,19 +35,17 @@ func NewRootCmd(b BuildInfo) *cobra.Command {
 	}
 	pf := root.Flags()
 	pf.StringVarP(&f.output, "output", "o", "", "output file path")
-	pf.StringVarP(&f.dir, "dir", "d", ".", "output directory")
-	pf.IntVarP(&f.connections, "connections", "x", 8, "parallel connections")
-	pf.IntVarP(&f.retries, "retries", "r", 5, "retry attempts")
+	pf.StringVarP(&f.dir, "dir", "d", cfg.Dir, "output directory")
+	pf.IntVarP(&f.connections, "connections", "x", cfg.Connections, "parallel connections")
+	pf.IntVarP(&f.retries, "retries", "r", cfg.Retries, "retry attempts")
 	pf.BoolVarP(&f.force, "force", "f", false, "overwrite existing files")
 	pf.BoolVarP(&f.quiet, "quiet", "q", false, "suppress progress output")
-	pf.StringVar(&f.checksum, "checksum", "", "verify download: algo:hex (e.g. sha256:...)")
+	pf.StringVar(&f.checksum, "checksum", "", "verify download: algo:hex")
 	pf.String("sha256", "", "shorthand for --checksum sha256:<hex>")
 	pf.StringVar(&f.backend, "backend", "auto", "force backend: auto|native|curl|rclone|git|yt-dlp|aria2c")
 	pf.BoolVar(&f.dryRun, "dry-run", false, "show classification and command without downloading")
 
-	root.AddCommand(newVersionCmd(b))
-	root.AddCommand(newDoctorCmd())
-	root.AddCommand(newInstallDepsCmd())
+	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd())
 	return root
 }
 
