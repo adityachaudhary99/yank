@@ -50,6 +50,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVar(&f.jsonOut, "json", false, "emit newline-delimited JSON progress")
 
 	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd())
+	root.AddCommand(newCompletionCmd(root), newGenManCmd(root))
 	return root
 }
 
