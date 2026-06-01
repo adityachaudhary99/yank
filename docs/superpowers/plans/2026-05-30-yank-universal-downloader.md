@@ -1746,6 +1746,7 @@ func TestResumeSingleStreamContinuesFromPart(t *testing.T) {
 		fmt.Sscanf(rng, "bytes=%d-", &start)
 		servedRangeFrom = start
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, len(body)-1, len(body)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", int64(len(body))-start))
 		w.WriteHeader(http.StatusPartialContent)
 		w.Write(body[start:])
 	}))

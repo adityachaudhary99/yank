@@ -88,39 +88,64 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	return &Result{Path: out, Bytes: n}, nil
 }
 
-// downloadSingle streams the whole body to a .part file then renames atomically.
+// downloadSingle streams the body to a .part file (resuming from an existing
+// partial when a compatible state is present) then renames atomically.
 func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (int64, error) {
 	part := out + ".part"
-	f, err := os.Create(part)
+
+	// Decide whether we can resume from an existing partial.
+	var offset int64
+	if st, _ := LoadState(out); st.Compatible(meta) && meta.SupportsRanges {
+		if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
+			offset = fi.Size()
+		}
+	}
+
+	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
+	if offset == 0 {
+		if err := f.Truncate(0); err != nil {
+			return 0, err
+		}
+	}
+	// Persist resume metadata up front so an interruption mid-transfer resumes.
+	(&State{URL: opt.URL, Validator: meta.Validator, Total: meta.Size}).Save(out)
 
-	var written int64
+	written := offset
 	err = withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, opt.URL, nil)
-		if err != nil {
-			return err
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, opt.URL, nil)
+		if rerr != nil {
+			return rerr
 		}
 		applyHeaders(req, opt.Headers)
-		resp, err := opt.Client.Do(req)
-		if err != nil {
-			return err
+		if offset > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+		}
+		resp, rerr := opt.Client.Do(req)
+		if rerr != nil {
+			return rerr
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 400 {
 			return fmt.Errorf("server returned %s", resp.Status)
 		}
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return err
+		// Asked for a range but got a full 200: server ignored it, restart at 0.
+		if offset > 0 && resp.StatusCode == http.StatusOK {
+			offset = 0
 		}
-		if err := f.Truncate(0); err != nil {
-			return err
+		if _, serr := f.Seek(offset, io.SeekStart); serr != nil {
+			return serr
 		}
-		cw := &countingWriter{w: f, total: meta.Size, sink: opt.Sink}
-		written, err = io.Copy(cw, resp.Body)
-		return err
+		if terr := f.Truncate(offset); terr != nil {
+			return terr
+		}
+		cw := &countingWriter{w: f, n: offset, total: meta.Size, sink: opt.Sink}
+		_, cerr := io.Copy(cw, resp.Body)
+		written = cw.n
+		return cerr
 	})
 	if err != nil {
 		return 0, err
@@ -131,6 +156,7 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 	if err := os.Rename(part, out); err != nil {
 		return 0, err
 	}
+	clearState(out)
 	return written, nil
 }
 
