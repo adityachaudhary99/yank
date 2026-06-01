@@ -27,23 +27,9 @@ nfpms:
     license: MIT
     bindir: /usr/bin
     recommends: [git, curl, aria2, yt-dlp, rclone]
-brews:
-  - name: yank
-    repository:
-      owner: adityachaudhary99
-      name: homebrew-tap
-    homepage: "https://github.com/adityachaudhary99/yank"
-    description: "One universal download command"
-    license: MIT
-aurs:
-  - name: yank-bin
-    homepage: "https://github.com/adityachaudhary99/yank"
-    description: "One universal download command"
-    maintainers: ["Aditya Chaudhary <adityaachaudhary2003@gmail.com>"]
-    license: MIT
-    git_url: "ssh://aur@aur.archlinux.org/yank-bin.git"
-    package: |-
-      install -Dm755 "./yank" "${pkgdir}/usr/bin/yank"
+# Homebrew tap and AUR publishing are deferred until the homebrew-tap repo
+# and AUR SSH key exist; re-add with non-deprecated syntax then. v0.1.0 ships
+# cross-platform binaries, a .deb, checksums, and a GitHub release.
 changelog:
   sort: asc
   filters:
