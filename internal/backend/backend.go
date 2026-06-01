@@ -52,3 +52,14 @@ func (r *Registry) Get(name string) (Backend, bool) {
 	b, ok := r.m[name]
 	return b, ok
 }
+
+// DefaultRegistry returns a registry with all built-in backends registered.
+func DefaultRegistry() *Registry {
+	r := NewRegistry()
+	r.Register(Git{})
+	r.Register(Ytdlp{})
+	r.Register(Aria2c{})
+	r.Register(Curl{})
+	r.Register(Rclone{})
+	return r
+}
