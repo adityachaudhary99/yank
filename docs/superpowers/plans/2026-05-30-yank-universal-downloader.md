@@ -4302,9 +4302,9 @@ func Detect(e Env) Capabilities {
 	if width <= 0 {
 		width = 80
 	}
-	color := e.TTY && e.ColorCfg && get("NO_COLOR") == ""
+	color := e.IsTTY && e.ColorCfg && get("NO_COLOR") == ""
 	unicode := !e.ForceASCII && localeIsUTF8(get)
-	return Capabilities{TTY: e.TTY, Color: color, Unicode: unicode, Width: width}
+	return Capabilities{TTY: e.IsTTY, Color: color, Unicode: unicode, Width: width}
 }
 
 func localeIsUTF8(get func(string) string) bool {
