@@ -55,7 +55,14 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVar(&f.ascii, "ascii", false, "force plain ASCII output (no color or unicode)")
 	f.color = cfg.Color
 
-	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd())
+	// Install-related flags are persistent so both downloads (missing-backend
+	// offer) and the install-deps subcommand share them.
+	gf := root.PersistentFlags()
+	gf.BoolVarP(&f.yes, "yes", "y", false, "auto-install missing backends without prompting")
+	gf.BoolVar(&f.printDeps, "print", false, "only print install commands; never run them")
+	gf.StringVar(&f.pm, "pm", "", "package manager to use (apt|dnf|pacman|zypper|apk|brew)")
+
+	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd(f))
 	root.AddCommand(newCompletionCmd(root), newGenManCmd(root))
 	return root
 }

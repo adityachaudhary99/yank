@@ -1,30 +1,44 @@
 package cli
 
 import (
+	"github.com/adityachaudhary99/yank/internal/backend"
+	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/spf13/cobra"
 )
 
-func newInstallDepsCmd() *cobra.Command {
-	var printOnly bool
-	cmd := &cobra.Command{
+func newInstallDepsCmd(f *downloadFlags) *cobra.Command {
+	return &cobra.Command{
 		Use:   "install-deps [tool...]",
-		Short: "Show or run install commands for backend tools",
+		Short: "Install backend tools via the detected package manager",
+		Long: "Install missing backend tools. Without --yes it asks before running; " +
+			"--print only shows the commands. The resolved package manager is remembered.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tools := args
 			if len(tools) == 0 {
 				tools = []string{"git", "rclone", "yt-dlp", "aria2c", "curl"}
 			}
-			mgr := doctor.DetectManager()
-			for _, t := range tools {
-				cmd.Println(doctor.InstallHint(t, mgr))
-			}
-			if !printOnly {
-				cmd.Println("\nRe-run with the commands above, or use --print to only display them.")
-			}
-			return nil
+			mgr := resolveAndRememberManager(f)
+			return doctor.Install(backend.ExecRunner{}, mgr, tools, doctor.InstallOptions{
+				Yes:   f.yes,
+				Print: f.printDeps,
+				TTY:   isTerminal(cmd.OutOrStdout()),
+				In:    cmd.InOrStdin(),
+				Out:   cmd.OutOrStdout(),
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&printOnly, "print", false, "only print install commands; do not execute")
-	return cmd
+}
+
+// resolveAndRememberManager resolves the package manager (flag > config >
+// detect) and, when it was freshly detected, writes it back to the config so
+// later runs skip detection.
+func resolveAndRememberManager(f *downloadFlags) string {
+	cfg, _ := config.Load()
+	mgr := doctor.ResolveManager(cfg.PackageManager, f.pm)
+	if mgr != "" && cfg.PackageManager == "" && f.pm == "" {
+		cfg.PackageManager = mgr
+		_ = config.Save(cfg)
+	}
+	return mgr
 }

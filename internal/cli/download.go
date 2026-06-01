@@ -10,6 +10,7 @@ import (
 	"github.com/adityachaudhary99/yank/internal/auth"
 	"github.com/adityachaudhary99/yank/internal/backend"
 	"github.com/adityachaudhary99/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/adityachaudhary99/yank/internal/engine"
 	"github.com/adityachaudhary99/yank/internal/route"
 	"github.com/spf13/cobra"
@@ -35,6 +36,9 @@ type downloadFlags struct {
 	theme       string
 	ascii       bool
 	color       bool
+	yes         bool
+	printDeps   bool
+	pm          string
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
@@ -59,10 +63,7 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 		if src.Backend == "native" {
 			err = nativeGet(cmd, f, raw)
 		} else {
-			r := route.New(backend.DefaultRegistry(), backend.ExecRunner{})
-			err = r.Dispatch(context.Background(), src, route.Request{
-				OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
-			})
+			err = dispatchWithInstall(cmd, f, src, passthrough)
 		}
 		if err != nil {
 			cmd.PrintErrln("yank:", err)
@@ -77,6 +78,38 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 		return withCode(ExitGeneric, fmt.Errorf("all downloads failed"))
 	}
 	return nil
+}
+
+// dispatchWithInstall routes a non-native source to its backend. If the backend
+// tool is missing it offers to install it (honoring --yes/--print/--pm and
+// non-TTY safety), then continues the download on success.
+func dispatchWithInstall(cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) error {
+	reg := backend.DefaultRegistry()
+	runner := backend.ExecRunner{}
+	b, ok := reg.Get(src.Backend)
+	if !ok {
+		return fmt.Errorf("no backend for source type %s", src.Type)
+	}
+	if _, lookErr := runner.LookPath(b.Tool()); lookErr != nil {
+		mgr := resolveAndRememberManager(f)
+		if ierr := doctor.Install(runner, mgr, []string{b.Tool()}, doctor.InstallOptions{
+			Yes:   f.yes,
+			Print: f.printDeps,
+			TTY:   isTerminal(cmd.OutOrStdout()),
+			In:    cmd.InOrStdin(),
+			Out:   cmd.OutOrStdout(),
+		}); ierr != nil {
+			return ierr
+		}
+		// Confirm the tool actually landed (e.g. --print prints but installs nothing).
+		if _, lookErr2 := runner.LookPath(b.Tool()); lookErr2 != nil {
+			return fmt.Errorf("%s requires %q which is still not installed", src.Type, b.Tool())
+		}
+	}
+	r := route.New(reg, runner)
+	return r.Dispatch(context.Background(), src, route.Request{
+		OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
+	})
 }
 
 func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
