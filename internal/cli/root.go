@@ -42,6 +42,7 @@ func NewRootCmd(b BuildInfo) *cobra.Command {
 
 	root.AddCommand(newVersionCmd(b))
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newInstallDepsCmd())
 	return root
 }
 
