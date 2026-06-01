@@ -25,6 +25,11 @@ func TestSinkASCIINoColor(t *testing.T) {
 	if strings.Contains(out, "\x1b[") {
 		t.Fatalf("no-color sink emitted ANSI: %q", out)
 	}
+	for i := 0; i < len(out); i++ {
+		if out[i] >= 0x80 {
+			t.Fatalf("ascii sink emitted non-ascii byte %#x in %q", out[i], out)
+		}
+	}
 }
 
 func TestSinkColorEmitsANSI(t *testing.T) {

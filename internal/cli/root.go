@@ -51,6 +51,9 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVar(&f.noParallel, "no-parallel", false, "force a single connection")
 	pf.DurationVar(&f.timeout, "timeout", 0, "overall HTTP timeout (e.g. 30s); 0 = none")
 	pf.BoolVar(&f.insecure, "insecure", false, "skip TLS certificate verification")
+	pf.StringVar(&f.theme, "theme", cfg.Theme, "progress UI theme: catppuccin|gruvbox|tokyonight|matrix")
+	pf.BoolVar(&f.ascii, "ascii", false, "force plain ASCII output (no color or unicode)")
+	f.color = cfg.Color
 
 	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd())
 	root.AddCommand(newCompletionCmd(root), newGenManCmd(root))

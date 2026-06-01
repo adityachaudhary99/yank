@@ -15,10 +15,11 @@ type Config struct {
 	Dir         string `toml:"dir"`
 	LimitRate   string `toml:"limit_rate"`
 	Color       bool   `toml:"color"`
+	Theme       string `toml:"theme"`
 }
 
 func Defaults() Config {
-	return Config{Connections: 8, Retries: 5, Dir: ".", Color: true}
+	return Config{Connections: 8, Retries: 5, Dir: ".", Color: true, Theme: "catppuccin"}
 }
 
 // Path returns the config file path honoring XDG_CONFIG_HOME.
@@ -60,5 +61,8 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("YANK_DIR"); v != "" {
 		c.Dir = v
+	}
+	if v := os.Getenv("YANK_THEME"); v != "" {
+		c.Theme = v
 	}
 }

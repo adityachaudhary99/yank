@@ -68,8 +68,8 @@ func (s *sink) Finish(path string) {
 	g := s.theme.Glyphs(s.caps)
 	elapsed := s.now().Sub(s.start).Round(time.Second)
 	ok := paint(s.theme.Palette.OK, g.OK, s.caps)
-	// summary card: "{ok} {name}  {elapsed} · {path}"
-	fmt.Fprintf(s.w, "%s%s %s  %s · %s\n", s.cr(), ok, s.name, elapsed, path)
+	// summary card: "{ok} {name}  {elapsed} {sep} {path}"
+	fmt.Fprintf(s.w, "%s%s %s  %s %s %s\n", s.cr(), ok, s.name, elapsed, s.sep(), path)
 }
 
 func (s *sink) Error(err error) {
@@ -87,6 +87,15 @@ func (s *sink) cr() string {
 		return "\r"
 	}
 	return ""
+}
+
+// sep returns the summary-card field separator: a middle dot when unicode is
+// available, an ASCII dash otherwise (keeps --ascii output pure 7-bit).
+func (s *sink) sep() string {
+	if s.caps.Unicode {
+		return "·"
+	}
+	return "-"
 }
 
 var _ progress.Sink = (*sink)(nil)

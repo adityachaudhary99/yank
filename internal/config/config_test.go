@@ -32,4 +32,32 @@ func TestDefaultsWhenNoFile(t *testing.T) {
 	if c.Connections != 8 || c.Retries != 5 {
 		t.Errorf("defaults wrong: %+v", c)
 	}
+	if c.Theme != "catppuccin" {
+		t.Errorf("default theme = %q, want catppuccin", c.Theme)
+	}
+}
+
+func TestThemePrecedence(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	os.WriteFile(cfgPath, []byte("theme = \"gruvbox\"\n"), 0o644)
+
+	// File applies when env is unset.
+	c, err := loadFrom(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Theme != "gruvbox" {
+		t.Errorf("theme = %q (file should apply)", c.Theme)
+	}
+
+	// Env overrides file.
+	t.Setenv("YANK_THEME", "matrix")
+	c, err = loadFrom(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Theme != "matrix" {
+		t.Errorf("theme = %q (env should win)", c.Theme)
+	}
 }
