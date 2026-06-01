@@ -41,6 +41,7 @@ func NewRootCmd(b BuildInfo) *cobra.Command {
 	pf.BoolVar(&f.dryRun, "dry-run", false, "show classification and command without downloading")
 
 	root.AddCommand(newVersionCmd(b))
+	root.AddCommand(newDoctorCmd())
 	return root
 }
 
