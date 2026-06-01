@@ -2,7 +2,10 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/adityachaudhary99/yank/internal/auth"
 	"github.com/adityachaudhary99/yank/internal/backend"
@@ -27,6 +30,9 @@ type downloadFlags struct {
 	basic       string
 	bearer      string
 	jsonOut     bool
+	noParallel  bool
+	timeout     time.Duration
+	insecure    bool
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
@@ -89,10 +95,22 @@ func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
 	if err != nil {
 		return err
 	}
+	client := http.DefaultClient
+	if f.insecure || f.timeout > 0 {
+		tr := &http.Transport{}
+		if f.insecure {
+			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
+		client = &http.Client{Transport: tr, Timeout: f.timeout}
+	}
+	conns := f.connections
+	if f.noParallel {
+		conns = 1
+	}
 	_, err = engine.Download(context.Background(), engine.Options{
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
-		Connections: f.connections, Retries: f.retries, Force: f.force,
-		Headers: hdr, Sink: sink, Checksum: sum,
+		Connections: conns, Retries: f.retries, Force: f.force,
+		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
 	})
 	return err
 }
