@@ -75,7 +75,12 @@ func Classify(raw string) Source {
 	if hostMatches(host, cloudHosts) || strings.Contains(host, ".s3.") || strings.HasSuffix(host, ".amazonaws.com") {
 		return Source{raw, TypeCloud, "rclone"}
 	}
-	if strings.HasSuffix(path, ".git") || hostMatches(host, repoHosts) {
+	if strings.HasSuffix(path, ".git") {
+		return Source{raw, TypeRepo, "git"}
+	}
+	// Repo hosts serve plenty of plain files too (release assets, source
+	// archives, raw/blob paths). Those are downloads, not clone targets.
+	if hostMatches(host, repoHosts) && !isRepoAssetPath(path) {
 		return Source{raw, TypeRepo, "git"}
 	}
 	switch u.Scheme {
@@ -85,6 +90,19 @@ func Classify(raw string) Source {
 		return Source{raw, TypeHTTP, "native"}
 	}
 	return s
+}
+
+// repoAssetSegments mark a repo-host URL as a downloadable asset or web view
+// (GitHub releases/archives/raw/blob, GitLab "/-/" paths) rather than a repo.
+var repoAssetSegments = []string{"/releases/", "/archive/", "/raw/", "/blob/", "/downloads/", "/-/"}
+
+func isRepoAssetPath(path string) bool {
+	for _, seg := range repoAssetSegments {
+		if strings.Contains(path, seg) {
+			return true
+		}
+	}
+	return false
 }
 
 func hostMatches(host string, list []string) bool {
