@@ -51,18 +51,18 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVar(&f.noParallel, "no-parallel", false, "force a single connection")
 	pf.DurationVar(&f.timeout, "timeout", 0, "overall HTTP timeout (e.g. 30s); 0 = none")
 	pf.BoolVar(&f.insecure, "insecure", false, "skip TLS certificate verification")
-	pf.StringVar(&f.theme, "theme", cfg.Theme, "progress UI theme: catppuccin|gruvbox|tokyonight|matrix")
-	pf.BoolVar(&f.ascii, "ascii", false, "force plain ASCII output (no color or unicode)")
 	f.color = cfg.Color
 
-	// Install-related flags are persistent so both downloads (missing-backend
-	// offer) and the install-deps subcommand share them.
+	// Presentation + install flags are persistent so subcommands (doctor,
+	// install-deps) and the download path share them.
 	gf := root.PersistentFlags()
+	gf.StringVar(&f.theme, "theme", cfg.Theme, "progress UI theme: catppuccin|gruvbox|tokyonight|matrix")
+	gf.BoolVar(&f.ascii, "ascii", false, "force plain ASCII output (no color or unicode)")
 	gf.BoolVarP(&f.yes, "yes", "y", false, "auto-install missing backends without prompting")
 	gf.BoolVar(&f.printDeps, "print", false, "only print install commands; never run them")
 	gf.StringVar(&f.pm, "pm", "", "package manager to use (apt|dnf|pacman|zypper|apk|brew)")
 
-	root.AddCommand(newVersionCmd(b), newDoctorCmd(), newInstallDepsCmd(f))
+	root.AddCommand(newVersionCmd(b), newDoctorCmd(f), newInstallDepsCmd(f))
 	root.AddCommand(newCompletionCmd(root), newGenManCmd(root))
 	return root
 }

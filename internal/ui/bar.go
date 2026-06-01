@@ -76,6 +76,10 @@ func paint(code, s string, caps Capabilities) string {
 	return code + s + "\x1b[0m"
 }
 
+// Paint is the exported form of paint, for callers outside this package (e.g.
+// the themed doctor checklist).
+func Paint(code, s string, caps Capabilities) string { return paint(code, s, caps) }
+
 // barWidth derives a sensible bar cell count from terminal width.
 func barWidth(termWidth int) int {
 	w := termWidth / 2
