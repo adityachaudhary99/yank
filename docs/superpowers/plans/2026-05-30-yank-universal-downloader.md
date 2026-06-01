@@ -30,6 +30,7 @@
 | **M2 Classify + dispatch** | 13–20 | git/yt-dlp/aria2c/rclone/curl routing, `doctor`, `--dry-run` |
 | **M3 Polish** | 21–26 | config, auth, `--json`, multi-URL, completions, man page |
 | **M4 Release** | 27–32 | GoReleaser, install.sh, .deb, Snap, Homebrew, AUR, docs → `v0.1.0` |
+| **M5 CLI experience** | 33–39 | Themed UI (`internal/ui`, four themes, ASCII-default) + dependency detect/offer-to-install + remembered package manager (design.md §15) |
 
 Each phase ends with working, testable software.
 
@@ -4196,6 +4197,571 @@ Expected: installs and prints the version.
 
 ---
 
+# Phase M5 — CLI Experience (themed UI + dependency auto-install)
+
+> Implements `docs/design.md` §15. **Presentation layer only** — no engine or
+> route changes. Introduces `internal/ui`; `internal/progress` keeps its `Sink`
+> interface and `Silent` impl (its `TTY` sink is replaced by the themed sink).
+> Backends keep their own native output. Each task is the standard TDD loop:
+> failing test → run-it-fails → implement → run-it-passes → commit.
+
+### Task 33: `internal/ui` — capability detection
+
+**Files:**
+- Create: `internal/ui/capabilities.go`
+- Test: `internal/ui/capabilities_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `internal/ui/capabilities_test.go`:
+```go
+package ui
+
+import "testing"
+
+func TestDetectCapabilities(t *testing.T) {
+	base := Env{
+		Getenv: func(k string) string {
+			return map[string]string{"LANG": "en_US.UTF-8"}[k]
+		},
+		IsTTY: true, Width: 100, ColorCfg: true,
+	}
+	c := Detect(base)
+	if !c.TTY || !c.Color || !c.Unicode || c.Width != 100 {
+		t.Fatalf("full caps wrong: %+v", c)
+	}
+
+	// NO_COLOR disables color but not unicode.
+	nc := base
+	nc.Getenv = func(k string) string {
+		return map[string]string{"LANG": "en_US.UTF-8", "NO_COLOR": "1"}[k]
+	}
+	if Detect(nc).Color {
+		t.Fatal("NO_COLOR must disable color")
+	}
+
+	// Non-TTY disables color; width falls back to 80.
+	notty := base
+	notty.IsTTY = false
+	notty.Width = 0
+	if d := Detect(notty); d.Color || d.Width != 80 {
+		t.Fatalf("non-tty caps wrong: %+v", d)
+	}
+
+	// --ascii forces unicode off; non-UTF-8 locale too.
+	a := base
+	a.ForceASCII = true
+	if Detect(a).Unicode {
+		t.Fatal("--ascii must disable unicode")
+	}
+	ascii := base
+	ascii.Getenv = func(k string) string { return map[string]string{"LANG": "C"}[k] }
+	if Detect(ascii).Unicode {
+		t.Fatal("non-UTF-8 locale must disable unicode")
+	}
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `go test ./internal/ui/ -run TestDetectCapabilities -v`
+Expected: FAIL — undefined `Env`, `Detect`, `Capabilities`.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `internal/ui/capabilities.go`:
+```go
+package ui
+
+import "strings"
+
+// Capabilities describes what the output terminal can do. Computed once.
+type Capabilities struct {
+	TTY     bool
+	Color   bool
+	Unicode bool
+	Width   int
+}
+
+// Env abstracts environment + terminal probing so detection is testable.
+type Env struct {
+	Getenv     func(string) string
+	IsTTY      bool
+	Width      int
+	ColorCfg   bool // config "color"
+	ForceASCII bool // --ascii flag
+}
+
+// Detect computes Capabilities from the environment.
+func Detect(e Env) Capabilities {
+	get := e.Getenv
+	if get == nil {
+		get = func(string) string { return "" }
+	}
+	width := e.Width
+	if width <= 0 {
+		width = 80
+	}
+	color := e.TTY && e.ColorCfg && get("NO_COLOR") == ""
+	unicode := !e.ForceASCII && localeIsUTF8(get)
+	return Capabilities{TTY: e.TTY, Color: color, Unicode: unicode, Width: width}
+}
+
+func localeIsUTF8(get func(string) string) bool {
+	if get("WT_SESSION") != "" { // Windows Terminal
+		return true
+	}
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		v := strings.ToUpper(get(k))
+		if strings.Contains(v, "UTF-8") || strings.Contains(v, "UTF8") {
+			return true
+		}
+	}
+	return false
+}
+```
+
+> The real TTY/width probing (`golang.org/x/term` or `os.Stdout` + an ioctl)
+> lives in the CLI layer that builds `Env`; `internal/ui` stays pure/testable.
+
+- [ ] **Step 4: Run test to verify it passes** — `go test ./internal/ui/ -run TestDetectCapabilities -v` → PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/ui && git commit -m "$(printf 'feat(ui): terminal capability detection (tty/color/unicode/width)\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+---
+
+### Task 34: `internal/ui` — theme model + four themes
+
+**Files:**
+- Create: `internal/ui/theme.go`
+- Create: `internal/ui/themes.go`
+- Test: `internal/ui/theme_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `internal/ui/theme_test.go`:
+```go
+package ui
+
+import "testing"
+
+func TestThemes(t *testing.T) {
+	if Default().Name != "catppuccin" {
+		t.Fatalf("default = %q", Default().Name)
+	}
+	for _, n := range []string{"catppuccin", "gruvbox", "tokyonight", "matrix"} {
+		th, ok := ByName(n)
+		if !ok || th.Name != n {
+			t.Fatalf("ByName(%q) = %+v ok=%v", n, th, ok)
+		}
+		if len(th.ASCII.Spinner) == 0 || len(th.Unicode.Spinner) == 0 {
+			t.Fatalf("%q missing spinner frames", n)
+		}
+		if th.ASCII.Fill == "" || th.ASCII.Track == "" {
+			t.Fatalf("%q missing ascii bar glyphs", n)
+		}
+	}
+	if _, ok := ByName("nope"); ok {
+		t.Fatal("unknown theme must report ok=false")
+	}
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails** — `go test ./internal/ui/ -run TestThemes -v` → FAIL (undefined `Theme`, `ByName`, `Default`).
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `internal/ui/theme.go`:
+```go
+package ui
+
+// Glyphs is one renderable character set (ASCII or Unicode variant).
+type Glyphs struct {
+	Spinner []string // animation frames
+	Fill    string   // filled bar cell
+	Head    string   // leading edge (ascii ">"); unicode may gradient at render time
+	Track   string   // empty bar cell
+	OK      string   // success marker
+	Fail    string   // error marker
+}
+
+// Palette holds ANSI/256/truecolor escape codes (empty when color is off).
+type Palette struct{ Accent, Fill, Track, OK, Fail, Dim string }
+
+// Theme is pure data: two glyph sets + a palette.
+type Theme struct {
+	Name    string
+	ASCII   Glyphs
+	Unicode Glyphs
+	Palette Palette
+}
+
+// Glyphs picks the set matching the terminal's capabilities.
+func (t Theme) Glyphs(c Capabilities) Glyphs {
+	if c.Unicode {
+		return t.Unicode
+	}
+	return t.ASCII
+}
+```
+
+Create `internal/ui/themes.go` with the four themes. Shared ASCII set; per-theme
+Unicode glyphs + palette (truecolor with a 256-color note for fallback):
+```go
+package ui
+
+var asciiSet = Glyphs{
+	Spinner: []string{"-", "\\", "|", "/"},
+	Fill:    "#", Head: ">", Track: "-", OK: "+", Fail: "x",
+}
+
+var themes = map[string]Theme{
+	"catppuccin": {
+		Name: "catppuccin", ASCII: asciiSet,
+		Unicode: Glyphs{Spinner: spinUnicode, Fill: "█", Head: "▉", Track: "░", OK: "✓", Fail: "✗"},
+		Palette: Palette{Accent: "\x1b[38;2;203;166;247m" /*mauve*/, Fill: "\x1b[38;2;148;226;213m" /*teal*/, Track: "\x1b[38;5;240m", OK: "\x1b[38;2;166;227;161m", Fail: "\x1b[38;2;243;139;168m", Dim: "\x1b[2m"},
+	},
+	"gruvbox":    {Name: "gruvbox", ASCII: asciiSet, Unicode: Glyphs{Spinner: spinUnicode, Fill: "█", Head: "▉", Track: "░", OK: "✓", Fail: "✗"}, Palette: Palette{Accent: "\x1b[38;2;250;189;47m", Fill: "\x1b[38;2;254;128;25m", Track: "\x1b[38;5;240m", OK: "\x1b[38;2;184;187;38m", Fail: "\x1b[38;2;251;73;52m", Dim: "\x1b[2m"}},
+	"tokyonight": {Name: "tokyonight", ASCII: asciiSet, Unicode: Glyphs{Spinner: spinUnicode, Fill: "█", Head: "▉", Track: "░", OK: "✔", Fail: "✘"}, Palette: Palette{Accent: "\x1b[38;2;122;162;247m", Fill: "\x1b[38;2;125;207;255m", Track: "\x1b[38;5;238m", OK: "\x1b[38;2;158;206;106m", Fail: "\x1b[38;2;247;118;142m", Dim: "\x1b[2m"}},
+	"matrix":     {Name: "matrix", ASCII: asciiSet, Unicode: Glyphs{Spinner: []string{"▖", "▘", "▝", "▗"}, Fill: "█", Head: "▉", Track: "·", OK: "+", Fail: "x"}, Palette: Palette{Accent: "\x1b[38;2;0;255;65m", Fill: "\x1b[38;2;0;255;65m", Track: "\x1b[38;5;22m", OK: "\x1b[38;2;0;255;65m", Fail: "\x1b[38;2;255;0;0m", Dim: "\x1b[2m"}},
+}
+
+var spinUnicode = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func ByName(name string) (Theme, bool) { t, ok := themes[name]; return t, ok }
+func Default() Theme                   { return themes["catppuccin"] }
+```
+
+- [ ] **Step 4: Run test to verify it passes** — `go test ./internal/ui/ -run TestThemes -v` → PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/ui && git commit -m "$(printf 'feat(ui): theme model + catppuccin/gruvbox/tokyonight/matrix themes\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+---
+
+### Task 35: `internal/ui` — renderer + themed `progress.Sink`
+
+**Files:**
+- Create: `internal/ui/bar.go` (bar + sparkline math)
+- Create: `internal/ui/sink.go` (themed `progress.Sink`)
+- Test: `internal/ui/bar_test.go`, `internal/ui/sink_test.go`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `internal/ui/bar_test.go`:
+```go
+package ui
+
+import "strings"
+
+import "testing"
+
+func TestRenderBarASCII(t *testing.T) {
+	g := asciiSet
+	bar := renderBar(50, 100, 10, g, Capabilities{}) // 50%, width 10 cells
+	if !strings.Contains(bar, "#") || !strings.Contains(bar, "-") {
+		t.Fatalf("ascii bar = %q", bar)
+	}
+}
+
+func TestSparklineMapsValues(t *testing.T) {
+	s := sparkline([]float64{0, 1, 2, 4, 8})
+	r := []rune(s)
+	if len(r) != 5 || r[0] != '▁' || r[4] != '█' {
+		t.Fatalf("sparkline = %q", s)
+	}
+}
+```
+
+Create `internal/ui/sink_test.go`:
+```go
+package ui
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+	"time"
+)
+
+func fixedClock() func() time.Time {
+	t := time.Unix(0, 0)
+	return func() time.Time { t = t.Add(time.Second); return t }
+}
+
+func TestSinkASCIINoColor(t *testing.T) {
+	var buf bytes.Buffer
+	caps := Capabilities{TTY: true, Color: false, Unicode: false, Width: 60}
+	s := newSink(&buf, Default(), caps, fixedClock(), "file.iso")
+	s.Update(61, 100)
+	s.Finish("./file.iso")
+	out := buf.String()
+	if !strings.Contains(out, "file.iso") || !strings.Contains(out, "61%") {
+		t.Fatalf("missing name/percent: %q", out)
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Fatalf("no-color sink emitted ANSI: %q", out)
+	}
+}
+
+func TestSinkColorEmitsANSI(t *testing.T) {
+	var buf bytes.Buffer
+	caps := Capabilities{TTY: true, Color: true, Unicode: true, Width: 60}
+	s := newSink(&buf, Default(), caps, fixedClock(), "file.iso")
+	s.Update(61, 100)
+	if !strings.Contains(buf.String(), "\x1b[") {
+		t.Fatal("color sink should emit ANSI codes")
+	}
+}
+
+func TestSinkNonTTYPlainSummary(t *testing.T) {
+	var buf bytes.Buffer
+	caps := Capabilities{TTY: false, Width: 80}
+	s := newSink(&buf, Default(), caps, fixedClock(), "file.iso")
+	s.Update(50, 100) // no redraws on non-tty
+	s.Finish("./file.iso")
+	out := buf.String()
+	if strings.Count(out, "\n") != 1 || strings.Contains(out, "\r") {
+		t.Fatalf("non-tty should print exactly one summary line: %q", out)
+	}
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail** — `go test ./internal/ui/ -run 'TestRenderBar|TestSparkline|TestSink' -v` → FAIL.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `internal/ui/bar.go` (pure rendering math: `renderBar`, `sparkline`,
+`humanBytes`, `paint(code, s, caps)` that no-ops color when `!caps.Color`).
+`renderBar` fills `floor(width*done/total)` cells with `g.Fill`, a `g.Head` at
+the edge, `g.Track` for the rest; `sparkline` maps values onto
+`▁▂▃▄▅▆▇█` by normalized magnitude.
+
+Create `internal/ui/sink.go` implementing `progress.Sink`:
+```go
+package ui
+
+import (
+	"fmt"
+	"io"
+	"sync"
+	"time"
+
+	"github.com/adityachaudhary99/yank/internal/progress"
+)
+
+type sink struct {
+	w     io.Writer
+	theme Theme
+	caps  Capabilities
+	now   func() time.Time
+	name  string
+	start time.Time
+	frame int
+	speeds []float64
+	mu    sync.Mutex
+}
+
+// NewSink returns a themed progress.Sink. Exported for the CLI; newSink is the
+// test seam taking an injectable clock.
+func NewSink(w io.Writer, t Theme, c Capabilities, name string) progress.Sink {
+	return newSink(w, t, c, time.Now, name)
+}
+
+func newSink(w io.Writer, t Theme, c Capabilities, now func() time.Time, name string) *sink {
+	return &sink{w: w, theme: t, caps: c, now: now, name: name, start: now()}
+}
+
+func (s *sink) Update(done, total int64) {
+	if !s.caps.TTY { // non-tty: stay silent until Finish
+		return
+	}
+	s.mu.Lock(); defer s.mu.Unlock()
+	g := s.theme.Glyphs(s.caps)
+	s.frame = (s.frame + 1) % len(g.Spinner)
+	// ... compute pct, speed (append to s.speeds), eta; build line:
+	// "\r{spin} {name}  [{bar}]  {pct}%  {speed}/s  {sparkline}  eta {eta}"
+	// each segment wrapped via paint(...) using s.theme.Palette + s.caps.
+	fmt.Fprintf(s.w, "\r%s %s  [%s]  %d%%", g.Spinner[s.frame], s.name,
+		renderBar(done, total, barWidth(s.caps.Width), g, s.caps), pct(done, total))
+}
+
+func (s *sink) Finish(path string) {
+	s.mu.Lock(); defer s.mu.Unlock()
+	g := s.theme.Glyphs(s.caps)
+	// summary card: "{ok} {name}  {size} · {elapsed} · {path}"
+	fmt.Fprintf(s.w, "\r%s %s  %s\n", paint(s.theme.Palette.OK, g.OK, s.caps), s.name, path)
+}
+
+func (s *sink) Error(err error) {
+	g := s.theme.Glyphs(s.caps)
+	fmt.Fprintf(s.w, "\r%s %s  error: %v\n", paint(s.theme.Palette.Fail, g.Fail, s.caps), s.name, err)
+}
+```
+
+> Keep `internal/progress`'s `Sink` interface and `Silent`. Delete the old
+> `progress.TTY` type and its test once the CLI (Task 36) constructs `ui.NewSink`.
+
+- [ ] **Step 4: Run tests to verify they pass** — `go test ./internal/ui/ -v` → PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/ui && git commit -m "$(printf 'feat(ui): themed progress sink with bar, spinner, sparkline\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+---
+
+### Task 36: Config + flags for theme/ascii; wire the themed sink
+
+**Files:**
+- Modify: `internal/config/config.go` (add `Theme`)
+- Modify: `internal/cli/root.go` (flags `--theme`, `--ascii`; build caps+theme)
+- Modify: `internal/cli/download.go` (construct `ui.NewSink` or `Silent`)
+- Test: `internal/config/config_test.go` (theme default + precedence)
+
+- [ ] **Step 1: Write the failing test** — assert `config.Default().Theme == "catppuccin"`, that a TOML `theme = "gruvbox"` loads, and that an explicit `--theme`/env overrides config (mirror the existing precedence test).
+
+- [ ] **Step 2: Run it to verify it fails.**
+
+- [ ] **Step 3: Implement**
+  - Add `Theme string \`toml:"theme"\`` to `Config`; default `"catppuccin"` in the defaults constructor.
+  - Add persistent flags `--theme` (string) and `--ascii` (bool) in `root.go`.
+  - In `runDownload`: if `--quiet`/`--json` → `progress.NewSilent()`; else resolve
+    theme (`ui.ByName(resolved)`, fall back to `ui.Default()`), build `ui.Env`
+    from real stdout TTY/width + `cfg.Color` + `--ascii`, `caps := ui.Detect(env)`,
+    and `sink := ui.NewSink(out, theme, caps, name)`.
+
+- [ ] **Step 4: Run `go test ./internal/config/ ./internal/cli/ -v` + `make build` + a manual download** → themed bar shows; `--ascii` forces ASCII; `--theme gruvbox` switches.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/config internal/cli && git commit -m "$(printf 'feat: --theme/--ascii flags + config theme; wire themed sink\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+---
+
+### Task 37: Package-manager persistence + `apk` + first-run prompt
+
+**Files:**
+- Modify: `internal/doctor/doctor.go` (add `apk`)
+- Modify: `internal/config/config.go` (add `PackageManager`)
+- Create: `internal/ui/prompt.go` (injectable Y/n + choice prompt)
+- Test: `internal/doctor/doctor_test.go`, `internal/config/config_test.go`, `internal/ui/prompt_test.go`
+
+- [ ] **Step 1: Write the failing tests**
+  - `DetectManager` now also recognizes `apk`; `InstallHint("git", "apk") == "sudo apk add git"`.
+  - `Config.PackageManager` round-trips through save/load.
+  - `prompt.Choose(in, out, "pick", []string{"apt","dnf"})` returns the selected
+    value given injected stdin; `prompt.Confirm(in,out,"Install?",true)` parses
+    `y`/`n`/empty(default).
+
+- [ ] **Step 2: Run to verify they fail.**
+
+- [ ] **Step 3: Implement**
+  - Add `"apk"` to the `DetectManager` probe list and an `apk` case to
+    `InstallHint` (`sudo apk add <tool>`).
+  - Add `PackageManager string \`toml:"package_manager"\`` to `Config`.
+  - Add `doctor.ResolveManager(cfg, flagPM)` → `flagPM` > `cfg.PackageManager` >
+    `DetectManager()`; when it resolves a non-empty value not already in config,
+    the caller saves it back.
+  - Add `internal/ui/prompt.go` with `Confirm` and `Choose` taking `io.Reader`/
+    `io.Writer` (no globals), so they're testable and reusable by the install flow.
+
+- [ ] **Step 4: Run `go test ./internal/doctor/ ./internal/config/ ./internal/ui/ -v`** → PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/doctor internal/config internal/ui && git commit -m "$(printf 'feat: remember package manager, add apk, add prompt helpers\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+---
+
+### Task 38: Offer-to-install runner; `install-deps` executes; missing-backend path
+
+**Files:**
+- Create: `internal/doctor/install.go` (confirm/run installer)
+- Modify: `internal/cli/installdeps.go` (execute, not just print)
+- Modify: the route/missing-backend branch in `internal/cli/` (offer instead of exit-5 print)
+- Modify: `internal/cli/root.go` (flags `--yes/-y`, `--print`, `--pm`)
+- Test: `internal/doctor/install_test.go`, `internal/cli/installdeps_test.go`
+
+- [ ] **Step 1: Write the failing tests** (use a fake runner mirroring `route.fakeRunner`)
+  - Missing `yt-dlp` + manager `apt` + `--print` → prints `sudo apt install yt-dlp`, **runs nothing**.
+  - With `--yes` → runner invoked with exactly that argv, **no prompt read**.
+  - Interactive `y` → runner invoked; interactive `n` → not invoked, non-zero.
+  - Non-TTY without `--yes` → prints command, returns non-zero, runner not invoked (never blocks).
+
+- [ ] **Step 2: Run to verify they fail.**
+
+- [ ] **Step 3: Implement**
+  - `doctor.Install(runner Runner, mgr string, tools []string, opt InstallOptions) error`
+    where `InstallOptions{Yes, Print bool; TTY bool; In io.Reader; Out io.Writer; Sink?}`.
+    Logic: build argv via `InstallHint`/manager mapping; `Print` → show + return;
+    else if `!Yes`: if `!TTY` → print + error; else `ui.Confirm(...)`; on yes run
+    via `runner` showing a themed spinner; map result to a `+`/`x` line.
+  - `install-deps` calls `doctor.Install` (default = prompt) instead of printing the
+    "re-run with the commands above" message.
+  - In the missing-backend branch, replace the exit-5 print with an `Install`
+    offer for the single needed tool, then (on success) continue the download.
+
+- [ ] **Step 4: Run `go test ./internal/doctor/ ./internal/cli/ -v`** → PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/doctor internal/cli && git commit -m "$(printf 'feat: detect+offer-to-install backends (--yes/--print, non-tty safe)\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+---
+
+### Task 39: Themed `doctor`, multi-transfer stack, optional banner
+
+**Files:**
+- Modify: `internal/cli/doctor.go` (render via `internal/ui`)
+- Create: `internal/ui/stack.go` (multi-line sink for multi-URL)
+- Create: `internal/ui/banner.go` (ASCII `yank` banner)
+- Modify: `internal/cli/version.go` (show banner)
+- Test: `internal/ui/stack_test.go`, `internal/ui/banner_test.go`, `internal/cli/doctor_test.go`
+
+- [ ] **Step 1: Write the failing tests**
+  - `doctor` output contains themed `+`/`x` per tool and a line naming the
+    resolved package manager.
+  - `stack.New(out, theme, caps, names)` returns one `progress.Sink` per name plus
+    an aggregate footer (`total X/Y, Z/s`); updating children updates the footer.
+  - `banner.Render(caps)` contains `yank` and is pure ASCII when `!caps.Unicode`.
+
+- [ ] **Step 2: Run to verify they fail.**
+
+- [ ] **Step 3: Implement** the themed doctor checklist, the multi-sink stack
+  (each child renders its own line; a shared total is recomputed on update), and
+  the small ASCII banner shown by `version`.
+
+- [ ] **Step 4: Run `go test ./internal/ui/ ./internal/cli/ -v` + a manual
+  `yank url1 url2` + `yank doctor` + `yank version`** → stacked bars, themed
+  checklist, banner.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/ui internal/cli && git commit -m "$(printf 'feat(ui): themed doctor, multi-transfer stack, version banner\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
+```
+
+**🎯 M5 complete:** themed, ASCII-safe UI across downloads/doctor/install, four
+switchable themes, and detect-and-offer-to-install with a remembered package
+manager. (design.md §15)
+
+---
+
 ## Appendix A — Final file map
 
 ```
@@ -4207,7 +4773,8 @@ yank/
     engine/     probe, filename, download, retry, state, parallel
     backend/    backend, git, ytdlp, aria2c, curl, rclone, util, io
     route/      route.go
-    progress/   progress (tty/silent), json
+    progress/   progress (silent), json     # tty sink superseded by internal/ui (M5)
+    ui/         capabilities, theme, themes, bar, sink, prompt, stack, banner (M5)
     config/     config.go
     auth/       auth.go
     checksum/   checksum.go
@@ -4239,11 +4806,16 @@ yank/
 | §11 Distribution | 27–32 (module path is final from Task 2; no rename) |
 | §12 Dev env | 1, 2 |
 | §13 Milestones | phase headers |
+| §15 CLI experience (themed UI + dependency auto-install) | 33–39 (M5) |
 
 **Deferred to v0.2 (tracked, intentionally out of this plan):** `--netrc`,
-`--limit-rate`, `--max-redirs`, `-v/--verbose`, `--no-color`, and the
-`yank config` subcommand (spec §6). Per-chunk parallel resume is also v0.2; v1
-resumes the single-stream path (Task 12b) and cleanly restarts an interrupted
-parallel download. These match the "Deferred to v0.2" note in `docs/design.md`
-§6 — spec and plan agree.
+`--limit-rate`, `--max-redirs`, `-v/--verbose`, and the `yank config`
+subcommand (spec §6). Per-chunk parallel resume is also v0.2; v1 resumes the
+single-stream path (Task 12b) and cleanly restarts an interrupted parallel
+download. These match the "Deferred to v0.2" note in `docs/design.md` §6 — spec
+and plan agree.
+
+**Now scheduled as Phase M5 (Tasks 33–39):** the themed UI and color handling
+(`NO_COLOR`/`--ascii`, superseding the old `--no-color`) plus
+detect-and-offer-to-install. See `docs/design.md` §15.
 ```

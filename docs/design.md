@@ -172,7 +172,8 @@ broken command. It prints, e.g.:
 ```
 
 and exits 5. Detection of the host package manager (apt/dnf/pacman/brew)
-tailors the hint.
+tailors the hint. *(v0.2/M5 evolves this from print-and-exit into
+detect-and-offer-to-install — see §15.2.)*
 
 ---
 
@@ -239,6 +240,7 @@ yank --dry-run https://youtu.be/x             # show plan only
 ## 8. Output, errors, exit codes
 
 - Default: a live progress bar (speed, ETA, %, per-file for multi-URL).
+  *(v0.2/M5 replaces the plain bar with a themed UI — see §15.1.)*
 - `--json`: newline-delimited JSON events (start/progress/done/error) for
   scripting.
 - `--quiet`: errors only. `--verbose`/`--debug`: backend commands + decisions.
@@ -355,6 +357,10 @@ backends and the engine are swappable behind the route layer.
 - **M3 — Polish:** config, auth, `--json`, completions, man page, multi-URL.
 - **M4 — Release:** GoReleaser (binaries, Homebrew tap, AUR), `install.sh`,
   `.deb` (nfpm), Snap, docs/man/completions → tag `v0.1.0`.
+- **M5 — CLI experience (post-v1):** themed progress UI (`internal/ui`, four
+  themes, ASCII-default with color/Unicode progressive enhancement) and
+  dependency *detect-and-offer-to-install* with a remembered package manager.
+  See §15.
 
 ---
 
@@ -378,3 +384,75 @@ backends and the engine are swappable behind the route layer.
    native filesystem (e.g. `~/oss/yank`) at the start of implementation for
    faster Go builds, keeping it reachable from Windows via
    `\wsl.localhost\Ubuntu-24.04\...`. OK?
+
+---
+
+## 15. CLI Experience (v0.2) — themed UI + dependency auto-install
+
+Two presentation-layer enhancements, layered on v1 **without** changing the
+engine or routing. Both render through one new package, `internal/ui`.
+Inspiration: the terminal-ricing aesthetic (swappable color themes —
+catppuccin/gruvbox/tokyo-night — fastfetch/btop-style panels) adapted to a
+downloader. Implemented as **Phase M5** in the plan (Tasks 33–39).
+
+### 15.1 Themeable progress UI
+
+Replaces the plain v1 progress line (§8) with an animated, themed bar.
+
+- **ASCII is the floor.** Color and Unicode are runtime-detected *progressive
+  enhancements*. On a dumb pipe, non-UTF-8 locale, or `--ascii`, output is plain
+  7-bit ASCII (`#`/`>`/`-`, `+`/`x`, `-\|/` spinner) and still fully informative.
+- **Capabilities** (computed once): `TTY` (stdout is a char device), `Color`
+  (`TTY` ∧ config `color` ∧ `NO_COLOR` unset), `Unicode` (UTF-8 in
+  `LC_ALL`/`LC_CTYPE`/`LANG`, or `WT_SESSION` set, and not `--ascii`), terminal
+  `Width`.
+- **Degradation:** full (theme spinner + sub-cell gradient bar `█▉▊…▏` +
+  sparkline + color) → ascii+color → ascii mono → non-TTY / `--quiet` / `--json`
+  (one plain summary line, no redraws).
+- **Themes are pure data** (palette + an ASCII glyph set and a Unicode glyph
+  set); the renderer picks the set from `Capabilities.Unicode`. Adding a theme is
+  a table entry. Ship four: **Catppuccin Mocha (default)**, **Gruvbox**,
+  **Tokyo Night**, **Matrix**. Select via `theme=` (config) or `--theme` (flag).
+- **Components:** spinner (advances on a fixed tick, so it never looks frozen
+  when throughput stalls), width-aware bar, speed **sparkline**
+  (`▁▂▃▄▅▆▇█`, Unicode only), completion **summary card**
+  (`size · time · checksum · path`), **multi-transfer stack** for multi-URL (one
+  line each + an aggregate footer), and a small ASCII `yank` banner on `version`
+  (optional/low-priority).
+- **Integration:** the engine is unchanged — it still takes `progress.Sink`; the
+  CLI constructs a themed `ui` sink (or `Silent` for quiet/json). Backends
+  (yt-dlp/aria2c/rclone/git) keep their own native output; yank prints a themed
+  one-line route header before handing the terminal over. **Out of scope:** no
+  full-screen/alternate-screen TUI; no capturing or re-theming backend output.
+
+### 15.2 Dependency detection & auto-install
+
+Evolves the v1 missing-backend behavior (§5) from "print a hint and exit 5" to
+"detect, offer, install."
+
+- **Detection:** probe `apt, dnf, pacman, zypper, apk, brew` (adds `apk`).
+- **Persistence:** new config key `package_manager`. Resolution order:
+  `--pm` flag → `package_manager` config → `DetectManager()`. The resolved value
+  is written back to the config file so later runs skip detection.
+- **First-run / unknown PM:** only when a backend is *actually missing* **and**
+  the manager is unresolved (config empty ∧ detection finds none), prompt the
+  user to pick one from the known list; the choice is saved.
+- **Offer-to-install (default):** show the exact command and ask `[Y/n]`; on yes,
+  run it (sudo prompts pass through) with a themed spinner, then continue the
+  original download. `--yes/-y` skips the prompt and runs; `--print` only prints
+  and never runs; if both are passed, `--print` wins.
+- **Non-interactive (no TTY, no `--yes`):** never block — print the command and
+  exit non-zero (`run with --yes to auto-install`).
+- `install-deps` now **executes** (same prompt / `--yes` / `--print` semantics)
+  instead of only printing; `doctor` renders its checklist through `internal/ui`
+  and shows the resolved package manager.
+
+### 15.3 Surface additions
+
+- **Config:** `theme` (default `catppuccin`), `package_manager` (remembered);
+  reuse existing `color`.
+- **Flags:** `--theme <name>`, `--ascii`, `--yes/-y`, `--print`, `--pm <name>`.
+- **Packages:** new `internal/ui` (themes, capability detection, renderer, sink,
+  prompt helper, banner). `internal/progress` keeps its `Sink` interface and
+  `Silent`; its old `TTY` sink is removed in favor of the `ui` sink.
+  `internal/doctor` gains an install runner and the `apk` case.
