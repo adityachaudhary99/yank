@@ -3,15 +3,14 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // sparkRamp is the 8-level block ramp used for the speed sparkline (Unicode).
 var sparkRamp = []rune("▁▂▃▄▅▆▇█")
 
-// renderBar builds a width-cell progress bar from a glyph set: it fills
-// floor(width*done/total) cells with g.Fill, places g.Head at the leading edge,
-// and fills the remainder with g.Track. Pure — color is applied by the caller.
-func renderBar(done, total int64, width int, g Glyphs, _ Capabilities) string {
+// barCells returns how many of width cells are filled for done/total.
+func barCells(done, total int64, width int) int {
 	if width <= 0 {
 		width = 10
 	}
@@ -22,12 +21,26 @@ func renderBar(done, total int64, width int, g Glyphs, _ Capabilities) string {
 	if filled > width {
 		filled = width
 	}
+	if filled < 0 {
+		filled = 0
+	}
+	return filled
+}
+
+// renderBar builds a width-cell progress bar from a glyph set: filled cells use
+// g.Fill, an optional g.Head marks the leading edge, the rest use g.Track. Pure
+// — color is applied by the caller.
+func renderBar(done, total int64, width int, g Glyphs, _ Capabilities) string {
+	if width <= 0 {
+		width = 10
+	}
+	filled := barCells(done, total, width)
 	var b strings.Builder
 	for i := 0; i < width; i++ {
 		switch {
 		case i < filled:
 			b.WriteString(g.Fill)
-		case i == filled && filled < width:
+		case i == filled && filled < width && g.Head != "":
 			b.WriteString(g.Head)
 		default:
 			b.WriteString(g.Track)
@@ -70,7 +83,7 @@ func sparkline(vals []float64) string {
 
 // paint wraps s in an ANSI color code, but only when color is enabled.
 func paint(code, s string, caps Capabilities) string {
-	if !caps.Color || code == "" {
+	if !caps.Color || code == "" || s == "" {
 		return s
 	}
 	return code + s + "\x1b[0m"
@@ -82,12 +95,12 @@ func Paint(code, s string, caps Capabilities) string { return paint(code, s, cap
 
 // barWidth derives a sensible bar cell count from terminal width.
 func barWidth(termWidth int) int {
-	w := termWidth / 2
+	w := termWidth / 3
 	if w < 10 {
 		w = 10
 	}
-	if w > 40 {
-		w = 40
+	if w > 30 {
+		w = 30
 	}
 	return w
 }
@@ -116,4 +129,22 @@ func humanBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f%cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// humanDur formats an elapsed duration as "30s" or "5m02s".
+func humanDur(d time.Duration) string {
+	s := int(d.Round(time.Second).Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	return fmt.Sprintf("%dm%02ds", s/60, s%60)
+}
+
+// etaStr estimates time remaining as mm:ss, or --:-- when unknown.
+func etaStr(done, total int64, speed float64) string {
+	if speed <= 0 || total <= 0 || done >= total {
+		return "--:--"
+	}
+	s := int(float64(total-done)/speed + 0.5)
+	return fmt.Sprintf("%02d:%02d", s/60, s%60)
 }

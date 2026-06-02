@@ -5,6 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/adityachaudhary99/yank/internal/auth"
@@ -113,11 +116,15 @@ func dispatchWithInstall(cmd *cobra.Command, f *downloadFlags, src classify.Sour
 }
 
 func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
-	sink := newProgressSink(cmd.OutOrStdout(), f, "download")
 	sum := f.checksum
 	if v, _ := cmd.Flags().GetString("sha256"); v != "" {
 		sum = "sha256:" + v
 	}
+	algo := ""
+	if sum != "" {
+		algo, _, _ = strings.Cut(sum, ":")
+	}
+	sink := newProgressSink(cmd.OutOrStdout(), f, displayName(raw, f.output), algo)
 	hdr, err := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: f.basic, Bearer: f.bearer})
 	if err != nil {
 		return err
@@ -140,6 +147,21 @@ func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
 	})
 	return err
+}
+
+// displayName is the best-effort transfer label for the live bar: the output
+// basename when -o is given, else the URL's last path segment, else "download".
+// (The completion card also prints the engine's resolved final path.)
+func displayName(raw, output string) string {
+	if output != "" {
+		return path.Base(output)
+	}
+	if u, err := url.Parse(raw); err == nil {
+		if b := path.Base(u.Path); b != "" && b != "/" && b != "." {
+			return b
+		}
+	}
+	return "download"
 }
 
 func printPlan(cmd *cobra.Command, src classify.Source, passthrough []string) {

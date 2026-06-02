@@ -1,21 +1,23 @@
 package ui
 
-const asciiBanner = "" +
-	"+- yank --------------------+\n" +
-	"|  one command, any source  |\n" +
-	"+---------------------------+"
+import "strings"
 
-const unicodeBanner = "" +
-	"╭─ yank ────────────────────╮\n" +
-	"│  one command, any source  │\n" +
-	"╰───────────────────────────╯"
-
-// Banner returns a small boxed banner containing the name "yank". It is pure
-// 7-bit ASCII when unicode is unavailable, and uses box-drawing characters when
-// it is.
-func Banner(caps Capabilities) string {
+// Banner returns the yank wordmark with a tagline and version. The art is pure
+// 7-bit ASCII; only the tagline separator upgrades to a middle dot on unicode
+// terminals, so the whole banner stays ASCII-safe when unicode is unavailable.
+func Banner(caps Capabilities, version string) string {
+	sep := "-"
 	if caps.Unicode {
-		return unicodeBanner
+		sep = "·"
 	}
-	return asciiBanner
+	if version == "" {
+		version = "dev"
+	}
+	lines := []string{
+		`   __ _____  ___  / /__`,
+		`  / // / _ ` + "`" + `/ _ \/  '_/   yank ` + sep + ` pull anything, anywhere`,
+		`  \_, /\_,_/_//_/_/\_\    ` + version,
+		` /___/`,
+	}
+	return strings.Join(lines, "\n")
 }

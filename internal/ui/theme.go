@@ -15,10 +15,11 @@ type Palette struct{ Accent, Fill, Track, OK, Fail, Dim string }
 
 // Theme is pure data: two glyph sets + a palette.
 type Theme struct {
-	Name    string
-	ASCII   Glyphs
-	Unicode Glyphs
-	Palette Palette
+	Name      string
+	ASCII     Glyphs
+	Unicode   Glyphs
+	Palette   Palette
+	Sparkline bool // show the live speed sparkline (Matrix signature)
 }
 
 // Glyphs picks the set matching the terminal's capabilities.

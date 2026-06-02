@@ -14,8 +14,8 @@ func newVersionCmd(b BuildInfo) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			caps := ui.Detect(ui.Env{Getenv: os.Getenv, IsTTY: isTerminal(out), Width: terminalWidth(out)})
-			cmd.Println(ui.Banner(caps))
-			cmd.Printf("yank %s (commit %s, built %s)\n", b.Version, b.Commit, b.Date)
+			cmd.Println(ui.Banner(caps, b.Version))
+			cmd.Printf("commit %s, built %s\n", b.Commit, b.Date)
 			return nil
 		},
 	}

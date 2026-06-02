@@ -11,8 +11,9 @@ import (
 
 // newProgressSink builds the progress sink for a download, honoring --quiet and
 // --json, otherwise constructing a themed UI sink from the terminal's
-// capabilities (TTY/color/unicode/width) and the resolved theme.
-func newProgressSink(out io.Writer, f *downloadFlags, name string) progress.Sink {
+// capabilities (TTY/color/unicode/width) and the resolved theme. name is the
+// transfer label; sum is the checksum algorithm (or "") for the summary card.
+func newProgressSink(out io.Writer, f *downloadFlags, name, sum string) progress.Sink {
 	switch {
 	case f.jsonOut:
 		return progress.NewJSON(out, name)
@@ -30,7 +31,7 @@ func newProgressSink(out io.Writer, f *downloadFlags, name string) progress.Sink
 		ColorCfg:   f.color,
 		ForceASCII: f.ascii,
 	}
-	return ui.NewSink(out, theme, ui.Detect(env), name)
+	return ui.NewSink(out, theme, ui.Detect(env), name, sum)
 }
 
 func isTerminal(w io.Writer) bool {
