@@ -62,7 +62,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	gf.BoolVar(&f.printDeps, "print", false, "only print install commands; never run them")
 	gf.StringVar(&f.pm, "pm", "", "package manager to use (apt|dnf|pacman|zypper|apk|brew)")
 
-	root.AddCommand(newVersionCmd(b), newDoctorCmd(f), newInstallDepsCmd(f))
+	root.AddCommand(newVersionCmd(b), newDoctorCmd(f), newInstallDepsCmd(f), newThemeCmd())
 	root.AddCommand(newCompletionCmd(root), newGenManCmd(root))
 	return root
 }

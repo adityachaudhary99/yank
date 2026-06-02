@@ -39,3 +39,8 @@ var themes = map[string]Theme{
 
 func ByName(name string) (Theme, bool) { t, ok := themes[name]; return t, ok }
 func Default() Theme                   { return themes["catppuccin"] }
+
+// Names returns the available theme names in a stable, display order.
+func Names() []string {
+	return []string{"catppuccin", "gruvbox", "tokyonight", "matrix"}
+}
