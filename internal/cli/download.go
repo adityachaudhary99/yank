@@ -110,9 +110,15 @@ func dispatchWithInstall(cmd *cobra.Command, f *downloadFlags, src classify.Sour
 		}
 	}
 	r := route.New(reg, runner)
-	return r.Dispatch(context.Background(), src, route.Request{
+	err := r.Dispatch(context.Background(), src, route.Request{
 		OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
 	})
+	if err != nil && src.Backend == "yt-dlp" {
+		// Distro yt-dlp packages lag badly and YouTube breaks old versions
+		// (HTTP 403 on extraction). Point the user at an update.
+		err = fmt.Errorf("%w\n  if extraction failed (e.g. a 403 on YouTube), your yt-dlp is likely outdated.\n  update it:  yt-dlp -U   (or reinstall the latest: https://github.com/yt-dlp/yt-dlp#installation)", err)
+	}
+	return err
 }
 
 func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
