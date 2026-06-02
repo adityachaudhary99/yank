@@ -17,24 +17,60 @@ type chunk struct {
 }
 
 // downloadParallel splits the file into N ranges fetched concurrently into a
-// pre-allocated file, then renames atomically. Writes resume state up front.
+// pre-allocated file, then renames atomically. Per-chunk progress is persisted
+// so an interrupted transfer resumes each chunk from where it stopped.
 func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) (int64, error) {
 	part := out + ".part"
+	chunks := planChunks(meta.Size, opt.Connections)
+
+	// Resume: reuse a compatible .part + state with the same chunk plan.
+	prog := make([]int64, len(chunks))
+	if st, _ := LoadState(out); st.Compatible(meta) && st.Connections == opt.Connections && len(st.Progress) == len(chunks) {
+		if fi, serr := os.Stat(part); serr == nil && fi.Size() == meta.Size {
+			copy(prog, st.Progress)
+		}
+	}
+
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return 0, err
 	}
-	if err := f.Truncate(meta.Size); err != nil {
+	if err := f.Truncate(meta.Size); err != nil { // allocate; preserves existing bytes
 		f.Close()
 		return 0, err
 	}
-	(&State{URL: opt.URL, Validator: meta.Validator, Total: meta.Size}).Save(out)
 
-	chunks := planChunks(meta.Size, opt.Connections)
+	saveState := func() {
+		snap := make([]int64, len(prog))
+		for i := range prog {
+			snap[i] = atomic.LoadInt64(&prog[i])
+		}
+		(&State{URL: opt.URL, Validator: meta.Validator, Total: meta.Size, Connections: opt.Connections, Progress: snap}).Save(out)
+	}
+	saveState()
+
 	var downloaded int64
+	for i := range prog {
+		downloaded += prog[i]
+	}
+	if downloaded > 0 {
+		opt.Sink.Update(downloaded, meta.Size) // show resumed position immediately
+	}
+
+	var saveMu sync.Mutex
+	lastSave := time.Now()
 	report := func(n int) {
 		total := atomic.AddInt64(&downloaded, int64(n))
 		opt.Sink.Update(total, meta.Size)
+		saveMu.Lock()
+		due := time.Since(lastSave) > time.Second
+		if due {
+			lastSave = time.Now()
+		}
+		saveMu.Unlock()
+		if due {
+			saveState()
+		}
 	}
 
 	sem := make(chan struct{}, opt.Connections)
@@ -43,12 +79,15 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 	var firstErr error
 
 	for _, c := range chunks {
+		if prog[c.index] >= c.end-c.start+1 {
+			continue // chunk already complete
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(c chunk) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := fetchChunk(ctx, opt, f, c, report); err != nil {
+			if err := fetchChunk(ctx, opt, f, c, prog, report); err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
@@ -60,6 +99,7 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 	wg.Wait()
 
 	if firstErr != nil {
+		saveState() // persist progress so the next run resumes
 		f.Close()
 		return 0, firstErr
 	}
@@ -92,14 +132,21 @@ func planChunks(size int64, n int) []chunk {
 	return chunks
 }
 
-func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, report func(int)) error {
+// fetchChunk downloads chunk c into f, resuming from prog[c.index] bytes already
+// written. offset is kept across retries (in the closure) so a mid-chunk failure
+// continues rather than re-downloading. report and prog are advanced per write.
+func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []int64, report func(int)) error {
+	offset := c.start + prog[c.index]
 	return withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
+		if offset > c.end {
+			return nil
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, opt.URL, nil)
 		if err != nil {
 			return err
 		}
 		applyHeaders(req, opt.Headers)
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", c.start, c.end))
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, c.end))
 		resp, err := opt.Client.Do(req)
 		if err != nil {
 			return err
@@ -108,7 +155,6 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, report fu
 		if resp.StatusCode != http.StatusPartialContent {
 			return fmt.Errorf("range request returned %s", resp.Status)
 		}
-		offset := c.start
 		buf := make([]byte, 32*1024)
 		for {
 			n, rerr := resp.Body.Read(buf)
@@ -117,6 +163,7 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, report fu
 					return werr
 				}
 				offset += int64(n)
+				atomic.AddInt64(&prog[c.index], int64(n))
 				report(n)
 			}
 			if rerr == io.EOF {

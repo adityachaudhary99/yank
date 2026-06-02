@@ -10,6 +10,10 @@ type State struct {
 	URL       string `json:"url"`
 	Validator string `json:"validator"` // ETag or Last-Modified
 	Total     int64  `json:"total"`
+	// Parallel-resume fields (omitted for single-stream): the connection count
+	// that produced the chunk plan, and bytes completed per chunk index.
+	Connections int     `json:"connections,omitempty"`
+	Progress    []int64 `json:"progress,omitempty"`
 }
 
 func statePath(out string) string { return out + ".yank-state.json" }
