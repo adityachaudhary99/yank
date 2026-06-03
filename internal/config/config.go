@@ -13,7 +13,6 @@ type Config struct {
 	Connections    int    `toml:"connections"`
 	Retries        int    `toml:"retries"`
 	Dir            string `toml:"dir"`
-	LimitRate      string `toml:"limit_rate"`
 	Color          bool   `toml:"color"`
 	Theme          string `toml:"theme"`
 	PackageManager string `toml:"package_manager"`
