@@ -1,6 +1,12 @@
 package cli
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"net"
+
+	"github.com/adityachaudhary99/yank/internal/checksum"
+)
 
 // Exit codes (spec §8).
 const (
@@ -31,7 +37,9 @@ func withCode(code int, err error) error {
 	return codedError{code: code, err: err}
 }
 
-// ExitCodeFor extracts the exit code from an error, defaulting to ExitGeneric.
+// ExitCodeFor maps an error to a spec §8 exit code. An explicitly attached code
+// wins; otherwise the error is classified by type (interrupt, checksum, usage,
+// network), defaulting to ExitGeneric.
 func ExitCodeFor(err error) int {
 	if err == nil {
 		return ExitOK
@@ -39,6 +47,21 @@ func ExitCodeFor(err error) int {
 	var c codedError
 	if errors.As(err, &c) {
 		return c.code
+	}
+	if errors.Is(err, context.Canceled) {
+		return ExitInterrupted
+	}
+	var mm *checksum.Mismatch
+	if errors.As(err, &mm) {
+		return ExitChecksum
+	}
+	var fe *checksum.FormatError
+	if errors.As(err, &fe) {
+		return ExitUsage
+	}
+	var ne net.Error // *url.Error (DNS, refused, TLS, timeout) satisfies this
+	if errors.As(err, &ne) {
+		return ExitNetwork
 	}
 	return ExitGeneric
 }

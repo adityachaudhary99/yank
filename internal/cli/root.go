@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/spf13/cobra"
@@ -33,6 +37,10 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 			return runDownload(cmd, f, args)
 		},
 	}
+	// Flag-parse errors (e.g. unknown flag) are usage errors → exit code 2.
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return withCode(ExitUsage, err)
+	})
 	pf := root.Flags()
 	pf.StringVarP(&f.output, "output", "o", "", "output file path")
 	pf.StringVarP(&f.dir, "dir", "d", cfg.Dir, "output directory")
@@ -68,9 +76,13 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 }
 
 func Execute(b BuildInfo) int {
-	err := NewRootCmd(b).Execute()
+	// Cancel in-flight work on Ctrl-C / SIGTERM so transfers stop cleanly
+	// (resume state is persisted as the download runs) and we can report 130.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	err := NewRootCmd(b).ExecuteContext(ctx)
 	if err != nil {
-		fmt.Println("yank:", err)
+		fmt.Fprintln(os.Stderr, "yank:", err)
 	}
 	return ExitCodeFor(err)
 }

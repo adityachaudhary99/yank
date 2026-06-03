@@ -49,7 +49,9 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
+	ctx := cmd.Context()
 	var failures int
+	var lastErr error
 	for _, raw := range urls {
 		src := classify.Classify(raw)
 		if f.backend != "" && f.backend != "auto" {
@@ -64,34 +66,39 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 		}
 		var err error
 		if src.Backend == "native" {
-			err = nativeGet(cmd, f, raw)
+			err = nativeGet(ctx, cmd, f, raw)
 		} else {
-			err = dispatchWithInstall(cmd, f, src, passthrough)
+			err = dispatchWithInstall(ctx, cmd, f, src, passthrough)
 		}
 		if err != nil {
-			cmd.PrintErrln("yank:", err)
 			failures++
-			continue
+			lastErr = err
+			if len(urls) > 1 { // in a batch, label each failure with its URL
+				cmd.PrintErrln("yank:", err)
+			}
 		}
 	}
-	if failures > 0 && failures < len(urls) {
+	switch {
+	case failures == 0:
+		return nil
+	case failures < len(urls):
 		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(urls)))
+	case len(urls) == 1:
+		return lastErr // single URL: preserve its specific exit code
+	default:
+		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(urls)))
 	}
-	if failures == len(urls) {
-		return withCode(ExitGeneric, fmt.Errorf("all downloads failed"))
-	}
-	return nil
 }
 
 // dispatchWithInstall routes a non-native source to its backend. If the backend
 // tool is missing it offers to install it (honoring --yes/--print/--pm and
 // non-TTY safety), then continues the download on success.
-func dispatchWithInstall(cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) error {
+func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) error {
 	reg := backend.DefaultRegistry()
 	runner := backend.ExecRunner{}
 	b, ok := reg.Get(src.Backend)
 	if !ok {
-		return fmt.Errorf("no backend for source type %s", src.Type)
+		return withCode(ExitUnsupported, fmt.Errorf("no backend for source type %s", src.Type))
 	}
 	if _, lookErr := runner.LookPath(b.Tool()); lookErr != nil {
 		mgr := resolveAndRememberManager(f)
@@ -102,15 +109,15 @@ func dispatchWithInstall(cmd *cobra.Command, f *downloadFlags, src classify.Sour
 			In:    cmd.InOrStdin(),
 			Out:   cmd.OutOrStdout(),
 		}); ierr != nil {
-			return ierr
+			return withCode(ExitMissingBackend, ierr)
 		}
 		// Confirm the tool actually landed (e.g. --print prints but installs nothing).
 		if _, lookErr2 := runner.LookPath(b.Tool()); lookErr2 != nil {
-			return fmt.Errorf("%s requires %q which is still not installed", src.Type, b.Tool())
+			return withCode(ExitMissingBackend, fmt.Errorf("%s requires %q which is still not installed", src.Type, b.Tool()))
 		}
 	}
 	r := route.New(reg, runner)
-	err := r.Dispatch(context.Background(), src, route.Request{
+	err := r.Dispatch(ctx, src, route.Request{
 		OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
 	})
 	if err != nil && src.Backend == "yt-dlp" {
@@ -121,7 +128,7 @@ func dispatchWithInstall(cmd *cobra.Command, f *downloadFlags, src classify.Sour
 	return err
 }
 
-func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
+func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string) error {
 	sum := f.checksum
 	if v, _ := cmd.Flags().GetString("sha256"); v != "" {
 		sum = "sha256:" + v
@@ -147,7 +154,7 @@ func nativeGet(cmd *cobra.Command, f *downloadFlags, raw string) error {
 	if f.noParallel {
 		conns = 1
 	}
-	_, err = engine.Download(context.Background(), engine.Options{
+	_, err = engine.Download(ctx, engine.Options{
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
 		Connections: conns, Retries: f.retries, Force: f.force,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
