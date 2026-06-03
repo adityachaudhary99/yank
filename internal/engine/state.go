@@ -44,8 +44,10 @@ func LoadState(out string) (*State, error) {
 }
 
 // Compatible reports whether a resume is valid against current remote metadata.
+// A resume requires a non-empty validator (ETag/Last-Modified) on both sides:
+// without one, a same-size-but-changed remote would silently corrupt the file.
 func (s *State) Compatible(m *Meta) bool {
-	if s == nil {
+	if s == nil || s.Validator == "" || m.Validator == "" {
 		return false
 	}
 	return s.Validator == m.Validator && s.Total == m.Size
