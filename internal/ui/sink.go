@@ -27,6 +27,8 @@ type sink struct {
 	speeds []float64
 	lastN  int64
 	lastT  int64
+	prevN  int64     // bytes at the last redraw (for instantaneous speed)
+	prevT  time.Time // time of the last redraw
 	mu     sync.Mutex
 }
 
@@ -61,11 +63,20 @@ func (s *sink) Update(done, total int64) {
 	s.frame = (s.frame + 1) % len(g.Spinner)
 
 	elapsed := now.Sub(s.start).Seconds()
-	var speed float64
+	var speed float64 // cumulative average, for the readout + ETA (stable)
 	if elapsed > 0 {
 		speed = float64(done) / elapsed
 	}
-	s.speeds = append(s.speeds, speed)
+	// The sparkline samples instantaneous speed (Δbytes/Δt since the last
+	// redraw) so it shows real variation instead of a flat average.
+	var inst float64
+	if !s.prevT.IsZero() {
+		if dt := now.Sub(s.prevT).Seconds(); dt > 0 {
+			inst = float64(done-s.prevN) / dt
+		}
+	}
+	s.prevN, s.prevT = done, now
+	s.speeds = append(s.speeds, inst)
 	if len(s.speeds) > 40 {
 		s.speeds = s.speeds[len(s.speeds)-40:]
 	}

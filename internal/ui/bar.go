@@ -27,28 +27,6 @@ func barCells(done, total int64, width int) int {
 	return filled
 }
 
-// renderBar builds a width-cell progress bar from a glyph set: filled cells use
-// g.Fill, an optional g.Head marks the leading edge, the rest use g.Track. Pure
-// — color is applied by the caller.
-func renderBar(done, total int64, width int, g Glyphs, _ Capabilities) string {
-	if width <= 0 {
-		width = 10
-	}
-	filled := barCells(done, total, width)
-	var b strings.Builder
-	for i := 0; i < width; i++ {
-		switch {
-		case i < filled:
-			b.WriteString(g.Fill)
-		case i == filled && filled < width && g.Head != "":
-			b.WriteString(g.Head)
-		default:
-			b.WriteString(g.Track)
-		}
-	}
-	return b.String()
-}
-
 // sparkline maps values onto the ▁▂▃▄▅▆▇█ ramp by normalized magnitude.
 func sparkline(vals []float64) string {
 	if len(vals) == 0 {
