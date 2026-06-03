@@ -11,12 +11,12 @@ import (
 // always a bare base name (no directory components).
 func ResolveFilename(rawurl, contentDisposition string) string {
 	if contentDisposition != "" {
-		if base := path.Base(contentDisposition); base != "." && base != "/" {
+		if base := safeBase(contentDisposition); base != "." && base != "/" && base != "" {
 			return base
 		}
 	}
 	if u, err := url.Parse(rawurl); err == nil {
-		if base := path.Base(u.Path); base != "." && base != "/" && base != "" {
+		if base := safeBase(u.Path); base != "." && base != "/" && base != "" {
 			return base
 		}
 	}
