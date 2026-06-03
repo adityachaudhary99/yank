@@ -153,7 +153,11 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusPartialContent {
-			return fmt.Errorf("range request returned %s", resp.Status)
+			e := fmt.Errorf("range request returned %s", resp.Status)
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 { // 4xx is terminal
+				return Permanent(e)
+			}
+			return e
 		}
 		buf := make([]byte, 32*1024)
 		for {

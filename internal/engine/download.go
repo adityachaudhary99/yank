@@ -130,7 +130,11 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 400 {
-			return fmt.Errorf("server returned %s", resp.Status)
+			e := fmt.Errorf("server returned %s", resp.Status)
+			if resp.StatusCode < 500 { // 4xx won't fix itself — don't retry
+				return Permanent(e)
+			}
+			return e
 		}
 		// Asked for a range but got a full 200: server ignored it, restart at 0.
 		if offset > 0 && resp.StatusCode == http.StatusOK {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"mime"
 	"net/http"
 	"strconv"
@@ -29,6 +30,12 @@ func Probe(ctx context.Context, client *http.Client, url string, headers http.He
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// A HEAD that's clearly "not here" won't be rescued by a GET; fail fast.
+	// (405/403/401 etc. fall through — many servers reject HEAD but serve GET.)
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+		return nil, Permanent(fmt.Errorf("server returned %s", resp.Status))
+	}
 
 	m := &Meta{}
 	if cl := resp.Header.Get("Content-Length"); cl != "" {

@@ -31,3 +31,17 @@ func TestRetryGivesUp(t *testing.T) {
 		t.Fatalf("calls=%d err=%v", calls, err)
 	}
 }
+
+func TestRetryStopsOnPermanent(t *testing.T) {
+	calls := 0
+	err := withRetry(context.Background(), 5, time.Millisecond, func() error {
+		calls++
+		return Permanent(errors.New("fatal"))
+	})
+	if calls != 1 {
+		t.Fatalf("permanent error should not retry: calls=%d", calls)
+	}
+	if err == nil || err.Error() != "fatal" {
+		t.Fatalf("want unwrapped 'fatal' error, got %v", err)
+	}
+}
