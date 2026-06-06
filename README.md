@@ -12,7 +12,11 @@ yank 'magnet:?xt=urn:btih:...'            # aria2c
 yank https://drive.google.com/file/d/ID   # rclone
 ```
 
-> Status: pre-release. The native HTTP engine and the dispatch layer are complete and tested; v0.1.0 is being prepared.
+![yank demo](docs/media/yank-demo.gif)
+
+*One command, every source: a native parallel download with resume + checksums, then automatic dispatch to git / yt-dlp / aria2c / rclone — with themed progress. ([full-quality MP4](docs/media/yank-demo.mp4))*
+
+> **v0.1.0 is released** — a single static Go binary (Linux & macOS), MIT licensed.
 
 ## How it works
 
@@ -25,7 +29,7 @@ You get one consistent interface, the speed of a real download accelerator for p
 
 ## Install
 
-One-liner (after v0.1.0 is published):
+One-liner:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/adityachaudhary99/yank/main/install.sh | sh
@@ -53,6 +57,8 @@ Debian/Ubuntu (`.deb`) and Homebrew/AUR/Snap packages ship with releases.
 | `magnet:…`, `*.torrent` | torrent | `aria2c` |
 
 Not sure what `yank` will do? Add `--dry-run` to see the plan without downloading.
+
+> **Google Drive note:** share links (`drive.google.com/file/d/…`) aren't first-class yet. They classify as cloud and route to `rclone`, which downloads direct cloud objects (S3 / GCS / Dropbox direct) but *not* Drive's share interstitial. Native Drive support via `gdown` is on the [roadmap](#roadmap).
 
 ## Usage
 
@@ -105,13 +111,17 @@ yank doctor
 
 ```
 yank backend status:
-  [ok]      git
-  [missing] rclone    -> sudo apt install rclone
-  [ok]      curl
-  ...
+  ✓ git
+  ✗ rclone    sudo apt install rclone
+  ✓ yt-dlp
+  ✗ aria2c    sudo apt install aria2
+  ✓ curl
+package manager: apt
 ```
 
-`yank install-deps [tool...]` prints the install commands for your package manager (it never runs `sudo` for you).
+Missing a backend? `yank install-deps [tool...]` installs it with your detected package manager — it asks first, or pass `--yes` to skip the prompt (`--print` only shows the commands). yank also offers to install a backend the moment a download needs one.
+
+![yank installs missing backends (rclone + aria2c) on demand](docs/media/yank-install.gif)
 
 ## Configuration
 
@@ -139,6 +149,24 @@ Precedence: **command-line flags > `YANK_*` env vars > config file > built-in de
 | 7 | partial failure (some URLs failed) |
 | 130 | interrupted |
 
+## Roadmap
+
+- **Native Google Drive** via `gdown` — Drive *share* links currently route to `rclone`, which only handles direct cloud-object URLs (S3 / GCS / Dropbox direct); first-class Drive support is planned for **v0.2**.
+- **HEAD-less hosts** — fall back to a ranged `GET` when a server rejects `HEAD`, so hosts that serve byte ranges but not `HEAD` (e.g. the Hetzner speed mirrors) work.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<details>
+<summary>★</summary>
+
+> **thanks for pulling with yank.**
+> built by Aditya Chaudhary, standing on the shoulders of
+> git · curl · yt-dlp · aria2c · rclone - and the Go community.
+> a star makes my day ♥
+>
+> _hiding this thank-you as an easter egg — idea from [@initlayers](https://x.com/initlayers/status/2060640573724512689)._
+
+</details>
+
