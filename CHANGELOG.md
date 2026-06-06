@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-06-06
+
+### Fixed
+
+- `install-deps` now installs the correct package for `aria2c`, which ships
+  in the `aria2` package on every supported manager; it previously tried to
+  install a non-existent `aria2c` package.
+- `install-deps --yes` (and yank's own confirmed install) now runs the package
+  manager non-interactively (`apt -y`, `dnf -y`, `pacman --noconfirm`,
+  `zypper --non-interactive`). Before, it would abort at the manager's own
+  prompt in non-interactive use and double-prompt in a terminal.
+
 ## [0.1.0] - 2026-06-04
 
 First public release. One command that downloads from anywhere.
@@ -49,4 +61,5 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.1.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.1
 [0.1.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.0
