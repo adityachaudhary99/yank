@@ -35,6 +35,22 @@ func TestInstallHintApk(t *testing.T) {
 	}
 }
 
+func TestPackageNameMapsAria2c(t *testing.T) {
+	if got := PackageName("aria2c"); got != "aria2" {
+		t.Fatalf("aria2c package = %q, want aria2", got)
+	}
+	if got := PackageName("rclone"); got != "rclone" {
+		t.Fatalf("rclone package = %q, want rclone", got)
+	}
+	// The hint and the actual argv must agree on the package name.
+	if got := InstallHint("aria2c", "apt"); got != "sudo apt install aria2" {
+		t.Fatalf("aria2c apt hint = %q", got)
+	}
+	if got := InstallArgv("apt", "aria2c"); got[len(got)-1] != "aria2" {
+		t.Fatalf("aria2c apt argv last = %q, want aria2", got[len(got)-1])
+	}
+}
+
 func TestResolveManagerPrecedence(t *testing.T) {
 	if ResolveManager("apt", "dnf") != "dnf" {
 		t.Fatal("flag should win over config")

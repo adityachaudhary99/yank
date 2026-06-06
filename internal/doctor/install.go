@@ -25,21 +25,30 @@ type InstallOptions struct {
 }
 
 // InstallArgv builds the package-manager command line (as argv) for tools.
+// Tool binary names are translated to package names (see PackageName). The
+// command is non-interactive: yank gates installation itself (via --yes or its
+// own [Y/n] prompt), so the package manager must not prompt a second time.
 // Returns nil for an unknown/empty manager.
 func InstallArgv(manager string, tools ...string) []string {
+	pkgs := make([]string, len(tools))
+	for i, t := range tools {
+		pkgs[i] = PackageName(t)
+	}
 	switch manager {
 	case "apt":
-		return append([]string{"sudo", "apt", "install"}, tools...)
+		return append([]string{"sudo", "apt", "install", "-y"}, pkgs...)
 	case "dnf":
-		return append([]string{"sudo", "dnf", "install"}, tools...)
+		return append([]string{"sudo", "dnf", "install", "-y"}, pkgs...)
 	case "pacman":
-		return append([]string{"sudo", "pacman", "-S"}, tools...)
+		return append([]string{"sudo", "pacman", "-S", "--noconfirm"}, pkgs...)
 	case "zypper":
-		return append([]string{"sudo", "zypper", "install"}, tools...)
+		return append([]string{"sudo", "zypper", "--non-interactive", "install"}, pkgs...)
 	case "apk":
-		return append([]string{"sudo", "apk", "add"}, tools...)
+		// apk add is non-interactive by default.
+		return append([]string{"sudo", "apk", "add"}, pkgs...)
 	case "brew":
-		return append([]string{"brew", "install"}, tools...)
+		// brew install is non-interactive by default.
+		return append([]string{"brew", "install"}, pkgs...)
 	default:
 		return nil
 	}

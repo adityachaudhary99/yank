@@ -20,7 +20,7 @@ func TestInstallPrintRunsNothing(t *testing.T) {
 	if err := Install(fr, "apt", []string{"yt-dlp"}, InstallOptions{Print: true, Out: &out}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "sudo apt install yt-dlp") {
+	if !strings.Contains(out.String(), "sudo apt install -y yt-dlp") {
 		t.Fatalf("print output = %q", out.String())
 	}
 	if fr.ran != nil {
@@ -34,7 +34,7 @@ func TestInstallYesRunsExactArgv(t *testing.T) {
 	if err := Install(fr, "apt", []string{"yt-dlp"}, InstallOptions{Yes: true, Out: &out}); err != nil {
 		t.Fatal(err)
 	}
-	want := "sudo apt install yt-dlp"
+	want := "sudo apt install -y yt-dlp"
 	if strings.Join(fr.ran, " ") != want {
 		t.Fatalf("ran %v want %q", fr.ran, want)
 	}
@@ -71,7 +71,7 @@ func TestInstallNonTTYWithoutYesNeverBlocks(t *testing.T) {
 	if fr.ran != nil {
 		t.Fatalf("must not run, ran %v", fr.ran)
 	}
-	if !strings.Contains(out.String(), "sudo apt install yt-dlp") {
+	if !strings.Contains(out.String(), "sudo apt install -y yt-dlp") {
 		t.Fatalf("should still print the command, got %q", out.String())
 	}
 }

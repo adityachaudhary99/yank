@@ -27,7 +27,7 @@ func TestInstallDepsPrintWithExplicitManager(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "sudo apt install git") {
+	if !strings.Contains(out.String(), "sudo apt install -y git") {
 		t.Fatalf("output = %q", out.String())
 	}
 }

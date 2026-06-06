@@ -37,22 +37,38 @@ func ResolveManager(configPM, flagPM string) string {
 	return DetectManager()
 }
 
+// packageNames maps a tool's binary name to its distro package name where the
+// two differ. Most tools (git, curl, rclone, yt-dlp) install under their own
+// name; aria2c ships in the "aria2" package on every supported manager.
+var packageNames = map[string]string{
+	"aria2c": "aria2",
+}
+
+// PackageName returns the package to install for a tool's binary name.
+func PackageName(tool string) string {
+	if p, ok := packageNames[tool]; ok {
+		return p
+	}
+	return tool
+}
+
 // InstallHint returns a copy-pasteable install command for tool under manager.
 func InstallHint(tool, manager string) string {
+	pkg := PackageName(tool)
 	switch manager {
 	case "apt":
-		return "sudo apt install " + tool
+		return "sudo apt install " + pkg
 	case "dnf":
-		return "sudo dnf install " + tool
+		return "sudo dnf install " + pkg
 	case "pacman":
-		return "sudo pacman -S " + tool
+		return "sudo pacman -S " + pkg
 	case "zypper":
-		return "sudo zypper install " + tool
+		return "sudo zypper install " + pkg
 	case "apk":
-		return "sudo apk add " + tool
+		return "sudo apk add " + pkg
 	case "brew":
-		return "brew install " + tool
+		return "brew install " + pkg
 	default:
-		return fmt.Sprintf("install %s with your system package manager", tool)
+		return fmt.Sprintf("install %s with your system package manager", pkg)
 	}
 }
