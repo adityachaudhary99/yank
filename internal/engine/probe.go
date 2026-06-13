@@ -47,11 +47,7 @@ func Probe(ctx context.Context, client *http.Client, url string, headers http.He
 	} else {
 		m.Validator = resp.Header.Get("Last-Modified")
 	}
-	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
-		if _, params, err := mime.ParseMediaType(cd); err == nil {
-			m.Filename = params["filename"]
-		}
-	}
+	m.Filename = filenameFromCD(resp.Header.Get("Content-Disposition"))
 	return m, nil
 }
 
@@ -61,4 +57,23 @@ func applyHeaders(req *http.Request, headers http.Header) {
 			req.Header.Add(k, v)
 		}
 	}
+}
+
+// filenameFromCD extracts a filename from a Content-Disposition value, preferring
+// the RFC 5987 extended form (filename* with a UTF-8 charset and percent-encoded
+// value) over the plain filename. Go's
+// mime.ParseMediaType decodes the extended value; checking both keys is robust to
+// which one it populates. Returns "" when none is present or the header is bad.
+func filenameFromCD(cd string) string {
+	if cd == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(cd)
+	if err != nil {
+		return ""
+	}
+	if fn := params["filename*"]; fn != "" {
+		return fn
+	}
+	return params["filename"]
 }

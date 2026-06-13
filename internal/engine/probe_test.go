@@ -34,3 +34,32 @@ func TestProbeReadsMetadata(t *testing.T) {
 		t.Errorf("validator = %q", m.Validator)
 	}
 }
+
+func TestProbeDecodesRFC5987Filename(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "10")
+		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''%E2%82%AC.txt")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	m, err := Probe(context.Background(), http.DefaultClient, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Filename != "€.txt" {
+		t.Errorf("filename = %q want €.txt", m.Filename)
+	}
+}
+
+func TestProbePrefersExtendedFilename(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "10")
+		w.Header().Set("Content-Disposition", `attachment; filename="plain.txt"; filename*=UTF-8''%E2%82%AC.txt`)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	m, _ := Probe(context.Background(), http.DefaultClient, srv.URL, nil)
+	if m.Filename != "€.txt" {
+		t.Errorf("filename = %q, extended should win", m.Filename)
+	}
+}
