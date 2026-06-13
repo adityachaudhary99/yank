@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/adityachaudhary99/yank/internal/checksum"
+	"github.com/adityachaudhary99/yank/internal/engine"
 )
 
 // Exit codes (spec §8).
@@ -58,6 +59,9 @@ func ExitCodeFor(err error) int {
 	var fe *checksum.FormatError
 	if errors.As(err, &fe) {
 		return ExitUsage
+	}
+	if errors.Is(err, engine.ErrStall) {
+		return ExitNetwork
 	}
 	var ne net.Error // *url.Error (DNS, refused, TLS, timeout) satisfies this
 	if errors.As(err, &ne) {
