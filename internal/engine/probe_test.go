@@ -127,6 +127,34 @@ func TestProbeGETFallback200NoRanges(t *testing.T) {
 	}
 }
 
+// A 206 to bytes=0-0 carries Content-Length: 1 (the range length). When the
+// server omits Content-Range, Size must be reported as unknown (0), never the
+// misleading 1-byte range length.
+func TestProbeGET206MissingContentRangeSizeUnknown(t *testing.T) {
+	body := bytes.Repeat([]byte("w"), 4096)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		// 206 but no Content-Range header (server bug we must tolerate).
+		w.Header().Set("Content-Length", "1")
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(body[:1])
+	}))
+	defer srv.Close()
+	m, err := Probe(context.Background(), srv.Client(), srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.SupportsRanges {
+		t.Error("206 should still imply range support")
+	}
+	if m.Size != 0 {
+		t.Errorf("size = %d, want 0 (unknown) — must not be the 1-byte range length", m.Size)
+	}
+}
+
 func TestProbeHeadNotFoundFailsFast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

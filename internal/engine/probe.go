@@ -68,9 +68,9 @@ func probeViaGET(ctx context.Context, client *http.Client, url string, headers h
 	m := metaFromHeaders(resp.Header)
 	if resp.StatusCode == http.StatusPartialContent {
 		m.SupportsRanges = true
-		if total := contentRangeTotal(resp.Header.Get("Content-Range")); total > 0 {
-			m.Size = total
-		}
+		// On a 206, Content-Length is the range length (1), not the resource
+		// size; take the size only from Content-Range (0 = unknown).
+		m.Size = contentRangeTotal(resp.Header.Get("Content-Range"))
 	}
 	return m, nil
 }
