@@ -17,8 +17,10 @@ type Meta struct {
 	Filename       string // from Content-Disposition, if present
 }
 
-// Probe issues a HEAD request to learn size, range support, validator, and
-// suggested filename. Falls back gracefully when headers are absent.
+// Probe issues a HEAD to learn size, range support, validator, and filename.
+// When HEAD errors or is rejected (a non-2xx that isn't 404/410), it falls back
+// to a ranged GET (Range: bytes=0-0) — many servers reject HEAD but serve GET.
+// A probe never downloads the resource body.
 func Probe(ctx context.Context, client *http.Client, url string, headers http.Header) (*Meta, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
@@ -27,28 +29,79 @@ func Probe(ctx context.Context, client *http.Client, url string, headers http.He
 	applyHeaders(req, headers)
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return probeViaGET(ctx, client, url, headers, err)
 	}
 	defer resp.Body.Close()
 
-	// A HEAD that's clearly "not here" won't be rescued by a GET; fail fast.
-	// (405/403/401 etc. fall through — many servers reject HEAD but serve GET.)
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
 		return nil, Permanent(fmt.Errorf("server returned %s", resp.Status))
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// HEAD rejected (403/405/501/…) — try a ranged GET instead.
+		return probeViaGET(ctx, client, url, headers, nil)
+	}
+	return metaFromHeaders(resp.Header), nil
+}
 
+// probeViaGET learns metadata from a Range: bytes=0-0 GET without downloading the
+// body. headErr, if non-nil, is the original HEAD transport error to surface when
+// the GET also fails.
+func probeViaGET(ctx context.Context, client *http.Client, url string, headers http.Header, headErr error) (*Meta, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	applyHeaders(req, headers)
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := client.Do(req)
+	if err != nil {
+		if headErr != nil {
+			return nil, headErr
+		}
+		return nil, err
+	}
+	defer resp.Body.Close() // never read the body — discard it
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+		return nil, Permanent(fmt.Errorf("server returned %s", resp.Status))
+	}
+	m := metaFromHeaders(resp.Header)
+	if resp.StatusCode == http.StatusPartialContent {
+		m.SupportsRanges = true
+		if total := contentRangeTotal(resp.Header.Get("Content-Range")); total > 0 {
+			m.Size = total
+		}
+	}
+	return m, nil
+}
+
+// metaFromHeaders extracts size, range support, validator, and filename.
+func metaFromHeaders(h http.Header) *Meta {
 	m := &Meta{}
-	if cl := resp.Header.Get("Content-Length"); cl != "" {
+	if cl := h.Get("Content-Length"); cl != "" {
 		m.Size, _ = strconv.ParseInt(cl, 10, 64)
 	}
-	m.SupportsRanges = strings.EqualFold(resp.Header.Get("Accept-Ranges"), "bytes")
-	if et := resp.Header.Get("ETag"); et != "" {
+	m.SupportsRanges = strings.EqualFold(h.Get("Accept-Ranges"), "bytes")
+	if et := h.Get("ETag"); et != "" {
 		m.Validator = et
 	} else {
-		m.Validator = resp.Header.Get("Last-Modified")
+		m.Validator = h.Get("Last-Modified")
 	}
-	m.Filename = filenameFromCD(resp.Header.Get("Content-Disposition"))
-	return m, nil
+	m.Filename = filenameFromCD(h.Get("Content-Disposition"))
+	return m
+}
+
+// contentRangeTotal parses the total from "bytes 0-0/12345" (0 if unknown/"*").
+func contentRangeTotal(cr string) int64 {
+	i := strings.LastIndex(cr, "/")
+	if i < 0 {
+		return 0
+	}
+	total, err := strconv.ParseInt(strings.TrimSpace(cr[i+1:]), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return total
 }
 
 func applyHeaders(req *http.Request, headers http.Header) {
