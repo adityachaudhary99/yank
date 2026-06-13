@@ -58,7 +58,10 @@ func TestProbePrefersExtendedFilename(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	m, _ := Probe(context.Background(), http.DefaultClient, srv.URL, nil)
+	m, err := Probe(context.Background(), http.DefaultClient, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if m.Filename != "€.txt" {
 		t.Errorf("filename = %q, extended should win", m.Filename)
 	}

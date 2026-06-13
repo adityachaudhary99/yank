@@ -60,10 +60,12 @@ func applyHeaders(req *http.Request, headers http.Header) {
 }
 
 // filenameFromCD extracts a filename from a Content-Disposition value, preferring
-// the RFC 5987 extended form (filename* with a UTF-8 charset and percent-encoded
-// value) over the plain filename. Go's
-// mime.ParseMediaType decodes the extended value; checking both keys is robust to
-// which one it populates. Returns "" when none is present or the header is bad.
+// the RFC 5987 extended form over the plain filename. Current Go versions decode
+// the extended filename*=<charset>'lang'<value> parameter directly into the
+// "filename" key (and let the extended value win when both forms are present), so
+// the explicit params["filename*"] check below is defensive insurance against a
+// future stdlib change and is normally unreachable. Returns "" when no filename is
+// present or the header is malformed.
 func filenameFromCD(cd string) string {
 	if cd == "" {
 		return ""
