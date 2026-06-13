@@ -60,6 +60,7 @@ func loadFrom(path string) (Config, error) {
 		return c, err
 	}
 	applyEnv(&c)
+	c.Dir = ExpandPath(c.Dir) // expand ~ from file/env/default before use
 	return c, nil
 }
 

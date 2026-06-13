@@ -13,6 +13,7 @@ import (
 	"github.com/adityachaudhary99/yank/internal/auth"
 	"github.com/adityachaudhary99/yank/internal/backend"
 	"github.com/adityachaudhary99/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/adityachaudhary99/yank/internal/engine"
 	"github.com/adityachaudhary99/yank/internal/route"
@@ -45,6 +46,9 @@ type downloadFlags struct {
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
+	// Expand ~ in path flags (config defaults are already expanded at load).
+	f.dir = config.ExpandPath(f.dir)
+	f.output = config.ExpandPath(f.output)
 	urls, passthrough := splitPassthrough(cmd, args)
 	if len(urls) == 0 {
 		return cmd.Help()

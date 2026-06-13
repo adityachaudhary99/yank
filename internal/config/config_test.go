@@ -77,3 +77,20 @@ func TestThemePrecedence(t *testing.T) {
 		t.Errorf("theme = %q (env should win)", c.Theme)
 	}
 }
+
+func TestDirTildeExpanded(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(cfgPath, []byte(`dir = "~/Downloads"`+"\n"), 0o644)
+	c, err := loadFrom(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, "Downloads")
+	if c.Dir != want {
+		t.Errorf("Dir = %q want %q", c.Dir, want)
+	}
+}
