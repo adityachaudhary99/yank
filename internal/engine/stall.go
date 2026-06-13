@@ -38,10 +38,17 @@ func newStallReader(r io.Reader, cancel context.CancelFunc, stall time.Duration)
 func (s *stallReader) Read(p []byte) (int, error) {
 	n, err := s.r.Read(p)
 	if n > 0 && s.timer != nil {
+		// Benign race: the watchdog may fire in the instant between this read
+		// returning and Reset below. Worst case is a spurious ErrStall on a
+		// healthy connection — retryable and resumed-from-offset, never data
+		// loss — so a lock on the hot read path isn't warranted.
 		s.timer.Reset(s.stall)
 	}
-	if err != nil && s.fired.Load() {
-		return n, ErrStall // surface the stall, not the context.Canceled it caused
+	// Only the watchdog's own cancel becomes ErrStall; a parent cancel (user
+	// interrupt) or any unrelated read error propagates unchanged so it isn't
+	// masked as a stall.
+	if err != nil && s.fired.Load() && errors.Is(err, context.Canceled) {
+		return n, ErrStall
 	}
 	return n, err
 }
