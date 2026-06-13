@@ -1,12 +1,14 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/adityachaudhary99/yank/internal/progress"
@@ -106,5 +108,62 @@ func TestNoResumeWithoutValidator(t *testing.T) {
 	}
 	if servedRangeFrom != -1 {
 		t.Fatalf("expected a full refetch, but a Range request resumed from %d", servedRangeFrom)
+	}
+}
+
+// TestResumeRestartsOnModeSwitch: a parallel .part (preallocated to full size,
+// half written) + parallel state, re-run as a single stream, must restart
+// cleanly rather than read the preallocated size as a contiguous offset
+// (which used to issue Range: bytes=<full>- → 416 → permanent failure).
+func TestResumeRestartsOnModeSwitch(t *testing.T) {
+	body := bytes.Repeat([]byte("ABCD"), 1<<18) // 1 MiB
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("ETag", `"v1"`)
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			return
+		}
+		var start, end int64
+		end = int64(len(body)) - 1
+		if rng := r.Header.Get("Range"); rng != "" {
+			fmt.Sscanf(rng, "bytes=%d-%d", &start, &end)
+			if end <= 0 || end >= int64(len(body)) {
+				end = int64(len(body)) - 1
+			}
+		}
+		if start >= int64(len(body)) {
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(body)))
+		w.Header().Set("Content-Length", strconv.Itoa(int(end-start+1)))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(body[start : end+1])
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	out := filepath.Join(dir, "f.bin")
+	part := out + ".part"
+	pf, err := os.Create(part)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pf.Truncate(int64(len(body)))     // parallel preallocation (sparse)
+	pf.WriteAt(body[:len(body)/2], 0) // first half "done"
+	pf.Close()
+	(&State{URL: srv.URL, Validator: `"v1"`, Total: int64(len(body)),
+		Connections: 8, Progress: make([]int64, 8)}).Save(out)
+
+	res, err := Download(context.Background(), Options{
+		URL: srv.URL, OutputPath: out, Connections: 1, Retries: 2,
+		Client: srv.Client(), Sink: progress.NewSilent(),
+	})
+	if err != nil {
+		t.Fatalf("cross-mode resume must restart cleanly, not fail: %v", err)
+	}
+	if got, _ := os.ReadFile(res.Path); !bytes.Equal(got, body) {
+		t.Fatalf("content mismatch: got %d want %d", len(got), len(body))
 	}
 }

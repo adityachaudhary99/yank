@@ -95,7 +95,7 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 
 	// Decide whether we can resume from an existing partial.
 	var offset int64
-	if st, _ := LoadState(out); st.Compatible(meta) && meta.SupportsRanges {
+	if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
 		if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
 			offset = fi.Size()
 		}

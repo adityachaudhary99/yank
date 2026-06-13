@@ -54,3 +54,19 @@ func (s *State) Compatible(m *Meta) bool {
 }
 
 func clearState(out string) { _ = os.Remove(statePath(out)) }
+
+// IsParallel reports whether the state describes a parallel (chunked) transfer.
+func (s *State) IsParallel() bool { return s != nil && s.Connections > 0 }
+
+// compatibleForSingle reports whether s can resume the current single-stream
+// transfer: validator+size match AND the saved state is itself single-stream.
+func (s *State) compatibleForSingle(m *Meta) bool {
+	return s.Compatible(m) && !s.IsParallel()
+}
+
+// compatibleForParallel reports whether s can resume the current parallel
+// transfer with conns connections: validator+size match, the saved state is
+// parallel, and its connection count matches.
+func (s *State) compatibleForParallel(m *Meta, conns int) bool {
+	return s.Compatible(m) && s.IsParallel() && s.Connections == conns
+}
