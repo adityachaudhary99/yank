@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/adityachaudhary99/yank/internal/checksum"
+	"github.com/adityachaudhary99/yank/internal/engine"
 )
 
 func TestExitCodeForClassifies(t *testing.T) {
@@ -26,6 +27,7 @@ func TestExitCodeForClassifies(t *testing.T) {
 		{"checksum format", fmtErr, ExitUsage},
 		{"network (url.Error)", &url.Error{Op: "Get", URL: "http://x", Err: errors.New("refused")}, ExitNetwork},
 		{"wrapped network", fmt.Errorf("probe: %w", &url.Error{Err: errors.New("dns")}), ExitNetwork},
+		{"stall", engine.ErrStall, ExitNetwork},
 		{"interrupted", context.Canceled, ExitInterrupted},
 		{"generic", errors.New("plain"), ExitGeneric},
 	}

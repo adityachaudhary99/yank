@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"github.com/adityachaudhary99/yank/internal/auth"
 	"github.com/adityachaudhary99/yank/internal/backend"
 	"github.com/adityachaudhary99/yank/internal/classify"
+	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/adityachaudhary99/yank/internal/engine"
 	"github.com/adityachaudhary99/yank/internal/route"
@@ -45,6 +47,9 @@ type downloadFlags struct {
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
+	// Expand ~ in path flags (config defaults are already expanded at load).
+	f.dir = config.ExpandPath(f.dir)
+	f.output = config.ExpandPath(f.output)
 	urls, passthrough := splitPassthrough(cmd, args)
 	if len(urls) == 0 {
 		return cmd.Help()
@@ -148,7 +153,13 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		if f.insecure {
 			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		}
-		client = &http.Client{Transport: tr, Timeout: f.timeout}
+		if f.timeout > 0 {
+			tr.ResponseHeaderTimeout = f.timeout
+			tr.DialContext = (&net.Dialer{Timeout: f.timeout}).DialContext
+		}
+		// No Client.Timeout: it would cap the whole transfer; stalls are handled
+		// per-read in the engine (Options.StallTimeout).
+		client = &http.Client{Transport: tr}
 	}
 	conns := f.connections
 	if f.noParallel {
@@ -158,6 +169,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
 		Connections: conns, Retries: f.retries, Force: f.force,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
+		StallTimeout: f.timeout,
 	})
 	return err
 }

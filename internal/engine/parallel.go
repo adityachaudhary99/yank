@@ -25,7 +25,7 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 
 	// Resume: reuse a compatible .part + state with the same chunk plan.
 	prog := make([]int64, len(chunks))
-	if st, _ := LoadState(out); st.Compatible(meta) && st.Connections == opt.Connections && len(st.Progress) == len(chunks) {
+	if st, _ := LoadState(out); st.compatibleForParallel(meta, opt.Connections) && len(st.Progress) == len(chunks) {
 		if fi, serr := os.Stat(part); serr == nil && fi.Size() == meta.Size {
 			copy(prog, st.Progress)
 		}
@@ -141,7 +141,9 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 		if offset > c.end {
 			return nil
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, opt.URL, nil)
+		attemptCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, opt.URL, nil)
 		if err != nil {
 			return err
 		}
@@ -159,9 +161,11 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 			}
 			return e
 		}
+		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
+		defer body.Stop()
 		buf := make([]byte, 32*1024)
 		for {
-			n, rerr := resp.Body.Read(buf)
+			n, rerr := body.Read(buf)
 			if n > 0 {
 				if _, werr := f.WriteAt(buf[:n], offset); werr != nil {
 					return werr

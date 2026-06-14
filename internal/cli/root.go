@@ -57,7 +57,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVar(&f.bearer, "bearer", "", "bearer token")
 	pf.BoolVar(&f.jsonOut, "json", false, "emit newline-delimited JSON progress")
 	pf.BoolVar(&f.noParallel, "no-parallel", false, "force a single connection")
-	pf.DurationVar(&f.timeout, "timeout", 0, "overall HTTP timeout (e.g. 30s); 0 = none")
+	pf.DurationVar(&f.timeout, "timeout", 0, "abort if a transfer stalls this long with no data (e.g. 30s); 0 = none")
 	pf.BoolVar(&f.insecure, "insecure", false, "skip TLS certificate verification")
 	f.color = cfg.Color
 

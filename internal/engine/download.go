@@ -25,6 +25,8 @@ type Options struct {
 	Client      *http.Client
 	Sink        progress.Sink
 	Checksum    string // "algo:hex"; empty to skip
+
+	StallTimeout time.Duration // abort an attempt if no bytes arrive within this; 0 = off
 }
 
 // Result reports what was downloaded.
@@ -95,7 +97,7 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 
 	// Decide whether we can resume from an existing partial.
 	var offset int64
-	if st, _ := LoadState(out); st.Compatible(meta) && meta.SupportsRanges {
+	if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
 		if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
 			offset = fi.Size()
 		}
@@ -116,7 +118,9 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 
 	written := offset
 	err = withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
-		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, opt.URL, nil)
+		attemptCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		req, rerr := http.NewRequestWithContext(attemptCtx, http.MethodGet, opt.URL, nil)
 		if rerr != nil {
 			return rerr
 		}
@@ -146,9 +150,12 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		if terr := f.Truncate(offset); terr != nil {
 			return terr
 		}
+		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
+		defer body.Stop()
 		cw := &countingWriter{w: f, n: offset, total: meta.Size, sink: opt.Sink}
-		_, cerr := io.Copy(cw, resp.Body)
+		_, cerr := io.Copy(cw, body)
 		written = cw.n
+		offset = written // resume from here if this attempt failed mid-stream
 		return cerr
 	})
 	if err != nil {

@@ -81,7 +81,7 @@ yank [flags] <url>...
       --bearer <token>     bearer token
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
-      --timeout <dur>      overall HTTP timeout, e.g. 30s
+      --timeout <dur>      abort if a transfer stalls (no data) this long, e.g. 30s
       --insecure           skip TLS certificate verification
 ```
 
@@ -135,6 +135,8 @@ dir = "~/Downloads"
 
 Precedence: **command-line flags > `YANK_*` env vars > config file > built-in defaults.**
 
+Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = "~/Downloads"`).
+
 ## Exit codes
 
 | Code | Meaning |
@@ -151,8 +153,7 @@ Precedence: **command-line flags > `YANK_*` env vars > config file > built-in de
 
 ## Roadmap
 
-- **Native Google Drive** via `gdown` — Drive *share* links currently route to `rclone`, which only handles direct cloud-object URLs (S3 / GCS / Dropbox direct); first-class Drive support is planned for **v0.2**.
-- **HEAD-less hosts** — fall back to a ranged `GET` when a server rejects `HEAD`, so hosts that serve byte ranges but not `HEAD` (e.g. the Hetzner speed mirrors) work.
+- **Native Google Drive** via `gdown` — Drive *share* links currently route to `rclone`, which only handles direct cloud-object URLs (S3 / GCS / Dropbox direct); first-class Drive support is planned for **v0.3**.
 
 ## License
 

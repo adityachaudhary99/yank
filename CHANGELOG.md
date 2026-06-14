@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-13
+
+### Changed
+
+- `--timeout` is now a **stall timeout** — it aborts a transfer only when no
+  data arrives within the window, instead of capping the whole download. Long
+  but healthy downloads with `--timeout` set no longer fail. The default
+  (`0` = off) is unchanged.
+
+### Added
+
+- **HEAD-less hosts** — when a server rejects `HEAD` (403/405/501), yank falls
+  back to a ranged `GET` to learn size, range support, and filename, so such
+  hosts get parallel + resumable downloads.
+- **`~` expansion** — `dir`, `-d`, and `-o` expand a leading `~` to your home
+  directory.
+
+### Fixed
+
+- **Mode-aware resume** — switching between parallel and `--no-parallel` across
+  runs no longer fails with a 416 or corrupts the partial file; a mode change
+  now restarts the transfer cleanly.
+- **RFC 5987 filenames** — `Content-Disposition: filename*=UTF-8''…` (non-ASCII
+  names) are decoded and honored.
+
 ## [0.1.1] - 2026-06-06
 
 ### Fixed
@@ -61,5 +86,6 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.2.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.2.0
 [0.1.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.1
 [0.1.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.0
