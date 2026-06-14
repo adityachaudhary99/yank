@@ -62,6 +62,53 @@ func TestStallTimeoutAbortsThenResumes(t *testing.T) {
 	}
 }
 
+// The watchdog guards each parallel chunk too: one connection that delivers a
+// little then stalls is aborted and resumes from its offset, while the others
+// finish, and the assembled file is correct.
+func TestStallTimeoutAbortsChunkThenResumes(t *testing.T) {
+	body := bytes.Repeat([]byte("z"), 2<<20) // > minParallelSize so 4 chunks are used
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("ETag", `"v1"`)
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			return
+		}
+		var start, end int64
+		fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-%d", &start, &end)
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(body)))
+		w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.Write(body[start : start+16]) // a little of this chunk, then hang
+			if fl, ok := w.(http.Flusher); ok {
+				fl.Flush()
+			}
+			time.Sleep(400 * time.Millisecond)
+			return
+		}
+		w.Write(body[start : end+1]) // every other request: serve the full range
+	}))
+	defer srv.Close()
+
+	out := filepath.Join(t.TempDir(), "f.bin")
+	res, err := Download(context.Background(), Options{
+		URL: srv.URL, OutputPath: out, Connections: 4, Retries: 3,
+		StallTimeout: 80 * time.Millisecond,
+		Client:       srv.Client(), Sink: progress.NewSilent(),
+	})
+	if err != nil {
+		t.Fatalf("expected eventual success via chunk resume, got %v", err)
+	}
+	if got, _ := os.ReadFile(res.Path); !bytes.Equal(got, body) {
+		t.Fatalf("content mismatch after parallel stall+resume: got %d want %d", len(got), len(body))
+	}
+	if atomic.LoadInt32(&calls) <= 4 {
+		t.Fatalf("expected a retry beyond the 4 initial chunk requests, calls=%d", calls)
+	}
+}
+
 // A slow but steady transfer (gaps under the stall window) is never aborted.
 func TestStallTimeoutAllowsSlowSteadyTransfer(t *testing.T) {
 	body := bytes.Repeat([]byte("y"), 1024)

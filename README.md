@@ -153,7 +153,7 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
 
 ## Roadmap
 
-- **Native Google Drive** via `gdown` — Drive *share* links currently route to `rclone`, which only handles direct cloud-object URLs (S3 / GCS / Dropbox direct); first-class Drive support is planned for **v0.2**.
+- **Native Google Drive** via `gdown` — Drive *share* links currently route to `rclone`, which only handles direct cloud-object URLs (S3 / GCS / Dropbox direct); first-class Drive support is planned for **v0.3**.
 
 ## License
 
