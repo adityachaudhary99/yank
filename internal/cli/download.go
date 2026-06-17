@@ -7,12 +7,15 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/adityachaudhary99/yank/internal/auth"
 	"github.com/adityachaudhary99/yank/internal/backend"
+	"github.com/adityachaudhary99/yank/internal/checksum"
 	"github.com/adityachaudhary99/yank/internal/classify"
 	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/adityachaudhary99/yank/internal/doctor"
@@ -95,19 +98,68 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	}
 }
 
-// dispatchWithInstall routes a non-native source to its backend. If the backend
-// tool is missing it offers to install it (honoring --yes/--print/--pm and
-// non-TTY safety), then continues the download on success.
+// checksumCapableBackends are dispatch backends whose single output file can be
+// checksum-verified: single-file fetchers with a knowable -o path. git (a repo),
+// yt-dlp (re-muxed media), and aria2c (torrents self-verify, often multi-file)
+// are excluded.
+var checksumCapableBackends = map[string]bool{"curl": true, "rclone": true}
+
+// checksumSpec resolves the effective checksum spec ("algo:hex") and its algo
+// from --checksum and the --sha256 shorthand. Shared by native and dispatch.
+func checksumSpec(cmd *cobra.Command, f *downloadFlags) (spec, algo string) {
+	spec = f.checksum
+	if v, _ := cmd.Flags().GetString("sha256"); v != "" {
+		spec = "sha256:" + v
+	}
+	if spec != "" {
+		algo, _, _ = strings.Cut(spec, ":")
+	}
+	return spec, algo
+}
+
+// resolvedDispatchPath is the file a dispatched backend writes given -o/-d, or ""
+// when no -o was set (auto-named results are not knowable up front).
+func resolvedDispatchPath(output, dir string) string {
+	if output == "" {
+		return ""
+	}
+	if filepath.IsAbs(output) {
+		return output
+	}
+	d := dir
+	if d == "" {
+		d = "."
+	}
+	return filepath.Join(d, output)
+}
+
+// dispatchWithInstall routes a non-native source to its backend. It gates
+// checksum requests up front (fail fast), installs a missing tool if needed
+// (with visible streams), then runs the transfer with unified chrome.
 func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) error {
 	reg := backend.DefaultRegistry()
-	runner := backend.ExecRunner{}
 	b, ok := reg.Get(src.Backend)
 	if !ok {
 		return withCode(ExitUnsupported, fmt.Errorf("no backend for source type %s", src.Type))
 	}
-	if _, lookErr := runner.LookPath(b.Tool()); lookErr != nil {
+
+	// R9b: gate checksum before any install or transfer.
+	spec, _ := checksumSpec(cmd, f)
+	if spec != "" {
+		if !checksumCapableBackends[src.Backend] {
+			return withCode(ExitUsage, fmt.Errorf("checksum verification is not supported for %s", src.Backend))
+		}
+		if f.output == "" {
+			return withCode(ExitUsage, fmt.Errorf("checksum verification for %s requires an explicit -o <file>", src.Backend))
+		}
+	}
+
+	// Install the tool if missing — visible streams (an install is a side op,
+	// not the download, so --quiet/--json must not hide its output).
+	install := backend.ExecRunner{}
+	if _, lookErr := install.LookPath(b.Tool()); lookErr != nil {
 		mgr := resolveAndRememberManager(f)
-		if ierr := doctor.Install(runner, mgr, []string{b.Tool()}, doctor.InstallOptions{
+		if ierr := doctor.Install(install, mgr, []string{b.Tool()}, doctor.InstallOptions{
 			Yes:   f.yes,
 			Print: f.printDeps,
 			TTY:   isTerminal(cmd.OutOrStdout()),
@@ -117,31 +169,70 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 			return withCode(ExitMissingBackend, ierr)
 		}
 		// Confirm the tool actually landed (e.g. --print prints but installs nothing).
-		if _, lookErr2 := runner.LookPath(b.Tool()); lookErr2 != nil {
+		if _, lookErr2 := install.LookPath(b.Tool()); lookErr2 != nil {
 			return withCode(ExitMissingBackend, fmt.Errorf("%s requires %q which is still not installed", src.Type, b.Tool()))
 		}
 	}
-	r := route.New(reg, runner)
-	err := r.Dispatch(ctx, src, route.Request{
-		OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
-	})
-	if err != nil && src.Backend == "yt-dlp" {
-		// Distro yt-dlp packages lag badly and YouTube breaks old versions
-		// (HTTP 403 on extraction). Point the user at an update.
-		err = fmt.Errorf("%w\n  if extraction failed (e.g. a 403 on YouTube), your yt-dlp is likely outdated.\n  update it:  yt-dlp -U   (or reinstall the latest: https://github.com/yt-dlp/yt-dlp#installation)", err)
+
+	// Mode-routed runner + reporter for the actual transfer.
+	so, se := dispatchStreams(f)
+	deps := runDispatchDeps{
+		runner:   backend.ExecRunner{Stdout: so, Stderr: se},
+		reporter: newDispatchReporter(cmd.OutOrStdout(), f),
+		reg:      reg,
 	}
-	return err
+	return runDispatch(ctx, deps, src, route.Request{
+		OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
+	}, spec, f.output, f.dir)
+}
+
+type runDispatchDeps struct {
+	runner   backend.Runner
+	reporter dispatchReporter
+	reg      *backend.Registry
+}
+
+// runDispatch runs one dispatched backend with unified chrome and an optional
+// post-download checksum (spec == "" skips it). It is the seam exercised by
+// tests with an injected runner + reporter.
+func runDispatch(ctx context.Context, d runDispatchDeps, src classify.Source, req route.Request, spec, outputPath, outputDir string) error {
+	b, ok := d.reg.Get(src.Backend)
+	if !ok {
+		return withCode(ExitUnsupported, fmt.Errorf("no backend for source type %s", src.Type))
+	}
+	d.reporter.Start(src.Backend, b.Tool(), src.Raw)
+	start := time.Now()
+	err := route.New(d.reg, d.runner).Dispatch(ctx, src, req)
+	if err != nil {
+		if src.Backend == "yt-dlp" {
+			// Distro yt-dlp packages lag badly and YouTube breaks old versions
+			// (HTTP 403 on extraction). Point the user at an update.
+			err = fmt.Errorf("%w\n  if extraction failed (e.g. a 403 on YouTube), your yt-dlp is likely outdated.\n  update it:  yt-dlp -U   (or reinstall the latest: https://github.com/yt-dlp/yt-dlp#installation)", err)
+		}
+		d.reporter.Error(err)
+		return err
+	}
+	outPath := resolvedDispatchPath(outputPath, outputDir)
+	note := ""
+	if spec != "" {
+		algo, want, perr := checksum.Parse(spec)
+		if perr != nil {
+			d.reporter.Error(perr)
+			return withCode(ExitUsage, perr)
+		}
+		if verr := checksum.VerifyFile(outPath, algo, want); verr != nil {
+			_ = os.Remove(outPath)
+			d.reporter.Error(verr)
+			return withCode(ExitChecksum, verr)
+		}
+		note = algo + " ok"
+	}
+	d.reporter.Finish(outPath, time.Since(start), note)
+	return nil
 }
 
 func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string) error {
-	sum := f.checksum
-	if v, _ := cmd.Flags().GetString("sha256"); v != "" {
-		sum = "sha256:" + v
-	}
-	algo := ""
-	if sum != "" {
-		algo, _, _ = strings.Cut(sum, ":")
-	}
+	sum, algo := checksumSpec(cmd, f)
 	sink := newProgressSink(cmd.OutOrStdout(), f, displayName(raw, f.output), algo)
 	hdr, err := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: f.basic, Bearer: f.bearer})
 	if err != nil {
