@@ -134,7 +134,7 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 400 {
-			e := fmt.Errorf("server returned %s", resp.Status)
+			e := &StatusError{Code: resp.StatusCode, Status: resp.Status}
 			if resp.StatusCode < 500 { // 4xx won't fix itself — don't retry
 				return Permanent(e)
 			}
@@ -143,6 +143,13 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		// Asked for a range but got a full 200: server ignored it, restart at 0.
 		if offset > 0 && resp.StatusCode == http.StatusOK {
 			offset = 0
+		}
+		// If we asked for a range and got 206, it must start at our offset —
+		// otherwise the body would be written at the wrong position.
+		if offset > 0 && resp.StatusCode == http.StatusPartialContent {
+			if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
+				return Permanent(fmt.Errorf("server returned wrong range for bytes=%d-: %q", offset, resp.Header.Get("Content-Range")))
+			}
 		}
 		if _, serr := f.Seek(offset, io.SeekStart); serr != nil {
 			return serr

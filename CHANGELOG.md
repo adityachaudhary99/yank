@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-06-18
+
+Hardening release from a post-v0.3.0 code review. No new features.
+
+### Fixed
+- The parallel engine now rejects a `206 Partial Content` whose `Content-Range`
+  does not start at the requested offset, preventing silent file corruption from
+  a server or proxy that mis-honors a range request (the single-stream resume
+  path is guarded the same way).
+- A failed chunk now cancels its sibling connections immediately instead of
+  letting them run out their retries — faster failure, no wasted bandwidth.
+- `safeBase` (used for `Content-Disposition` filenames) now strips Windows
+  drive-relative prefixes (`C:evil`) and trailing dots/spaces, and rejects
+  reserved device names (`CON`, `NUL`, …).
+- A server `5xx` failure now maps to the network exit code (3) instead of the
+  generic one (1).
+
+### Added / Changed
+- `--insecure` now applies to dispatched backends (curl `-k`, rclone / yt-dlp /
+  aria2c equivalents, `git -c http.sslVerify=false`) — previously it was a silent
+  no-op for non-native downloads.
+- yank-injected headers (`--header`, `--user`, `--bearer`) are now dropped on a
+  redirect to a different host, so secrets don't leak to a redirect target.
+- `--json` dispatch events now include a `name` field, matching native events for
+  a consistent machine-readable schema across all routes.
+
 ## [0.3.0] - 2026-06-18
 
 One UX across every route. Dispatched backends (git, yt-dlp, aria2c, rclone,
@@ -114,6 +140,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.3.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.1
 [0.3.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.0
 [0.2.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.2.0
 [0.1.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.1

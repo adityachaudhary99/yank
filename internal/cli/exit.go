@@ -63,6 +63,10 @@ func ExitCodeFor(err error) int {
 	if errors.Is(err, engine.ErrStall) {
 		return ExitNetwork
 	}
+	var se *engine.StatusError // a server 5xx is a transient remote failure
+	if errors.As(err, &se) && se.Code >= 500 {
+		return ExitNetwork
+	}
 	var ne net.Error // *url.Error (DNS, refused, TLS, timeout) satisfies this
 	if errors.As(err, &ne) {
 		return ExitNetwork

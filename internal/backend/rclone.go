@@ -13,6 +13,9 @@ func (Rclone) Build(req Request) ([]string, error) {
 	} else {
 		argv = append(argv, dirOrDot(req.OutputDir), "--auto-filename")
 	}
+	if req.Insecure {
+		argv = append(argv, "--no-check-certificate")
+	}
 	argv = append(argv, req.Passthrough...)
 	return argv, nil
 }

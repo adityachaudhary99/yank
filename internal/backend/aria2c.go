@@ -7,6 +7,9 @@ func (Aria2c) Name() string { return "aria2c" }
 func (Aria2c) Tool() string { return "aria2c" }
 func (Aria2c) Build(req Request) ([]string, error) {
 	argv := []string{"aria2c", "--seed-time=0", "--dir=" + dirOrDot(req.OutputDir)}
+	if req.Insecure {
+		argv = append(argv, "--check-certificate=false")
+	}
 	if req.Output != "" {
 		argv = append(argv, "--out="+req.Output)
 	}

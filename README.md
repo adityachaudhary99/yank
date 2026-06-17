@@ -82,7 +82,7 @@ yank [flags] <url>...
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
       --timeout <dur>      abort if a transfer stalls (no data) this long, e.g. 30s
-      --insecure           skip TLS certificate verification
+      --insecure           skip TLS verification (native + dispatched backends)
 ```
 
 These flags behave the **same on every route**. Whether yank downloads natively

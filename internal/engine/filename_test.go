@@ -21,3 +21,20 @@ func TestResolveFilename(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeBaseHardening(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`C:evil`, "evil"},
+		{`..\..\x`, "x"},
+		{"report.bin", "report.bin"},
+		{"file.", "file"},
+		{"NUL", ""},
+		{"CON.txt", ""},
+		{".gitignore", ".gitignore"},
+	}
+	for _, c := range cases {
+		if got := safeBase(c.in); got != c.want {
+			t.Errorf("safeBase(%q) = %q want %q", c.in, got, c.want)
+		}
+	}
+}

@@ -20,10 +20,10 @@ type dispatchReporter interface {
 
 // newDispatchReporter selects the reporter for the current output mode, the same
 // way newProgressSink does for native downloads.
-func newDispatchReporter(out io.Writer, f *downloadFlags) dispatchReporter {
+func newDispatchReporter(out io.Writer, f *downloadFlags, name string) dispatchReporter {
 	switch {
 	case f.jsonOut:
-		return &jsonReporter{enc: json.NewEncoder(out)}
+		return &jsonReporter{enc: json.NewEncoder(out), name: name}
 	case f.quiet:
 		return silentReporter{}
 	}
@@ -84,16 +84,17 @@ func (r *themedReporter) Error(err error) {
 
 type jsonReporter struct {
 	enc     *json.Encoder
+	name    string
 	backend string
 }
 
 func (j *jsonReporter) Start(backend, tool, url string) {
 	j.backend = backend
-	_ = j.enc.Encode(map[string]any{"event": "start", "backend": backend, "tool": tool, "url": url})
+	_ = j.enc.Encode(map[string]any{"event": "start", "name": j.name, "backend": backend, "tool": tool, "url": url})
 }
 
 func (j *jsonReporter) Finish(path string, elapsed time.Duration, checksumNote string) {
-	m := map[string]any{"event": "done", "backend": j.backend, "elapsed_ms": elapsed.Milliseconds()}
+	m := map[string]any{"event": "done", "name": j.name, "backend": j.backend, "elapsed_ms": elapsed.Milliseconds()}
 	if path != "" {
 		m["path"] = path
 	}
@@ -104,5 +105,5 @@ func (j *jsonReporter) Finish(path string, elapsed time.Duration, checksumNote s
 }
 
 func (j *jsonReporter) Error(err error) {
-	_ = j.enc.Encode(map[string]any{"event": "error", "backend": j.backend, "error": err.Error()})
+	_ = j.enc.Encode(map[string]any{"event": "error", "name": j.name, "backend": j.backend, "error": err.Error()})
 }

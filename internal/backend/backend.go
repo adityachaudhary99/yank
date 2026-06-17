@@ -13,6 +13,7 @@ type Request struct {
 	Source      classify.Source
 	OutputDir   string
 	Output      string
+	Insecure    bool     // skip TLS verification (maps to each tool's flag)
 	Passthrough []string // user args after "--"
 }
 

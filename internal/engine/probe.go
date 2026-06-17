@@ -104,6 +104,21 @@ func contentRangeTotal(cr string) int64 {
 	return total
 }
 
+// contentRangeStart parses the start offset from "bytes 12-99/12345". ok is
+// false when the header is absent or unparseable.
+func contentRangeStart(cr string) (start int64, ok bool) {
+	cr = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(cr), "bytes"))
+	i := strings.IndexByte(cr, '-')
+	if i < 0 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(cr[:i]), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 func applyHeaders(req *http.Request, headers http.Header) {
 	for k, vs := range headers {
 		for _, v := range vs {

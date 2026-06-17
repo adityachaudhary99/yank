@@ -28,6 +28,8 @@ func TestExitCodeForClassifies(t *testing.T) {
 		{"network (url.Error)", &url.Error{Op: "Get", URL: "http://x", Err: errors.New("refused")}, ExitNetwork},
 		{"wrapped network", fmt.Errorf("probe: %w", &url.Error{Err: errors.New("dns")}), ExitNetwork},
 		{"stall", engine.ErrStall, ExitNetwork},
+		{"server 5xx", &engine.StatusError{Code: 503, Status: "503 Service Unavailable"}, ExitNetwork},
+		{"client 4xx", &engine.StatusError{Code: 404, Status: "404 Not Found"}, ExitGeneric},
 		{"interrupted", context.Canceled, ExitInterrupted},
 		{"generic", errors.New("plain"), ExitGeneric},
 	}

@@ -73,6 +73,8 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		}
 	}
 
+	gctx, cancelGroup := context.WithCancel(ctx)
+	defer cancelGroup()
 	sem := make(chan struct{}, opt.Connections)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -87,10 +89,11 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		go func(c chunk) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := fetchChunk(ctx, opt, f, c, prog, report); err != nil {
+			if err := fetchChunk(gctx, opt, f, c, prog, report); err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
+					cancelGroup() // stop the sibling chunks; don't burn their retries
 				}
 				mu.Unlock()
 			}
@@ -155,11 +158,20 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusPartialContent {
-			e := fmt.Errorf("range request returned %s", resp.Status)
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 { // 4xx is terminal
-				return Permanent(e)
+			if resp.StatusCode >= 400 {
+				e := &StatusError{Code: resp.StatusCode, Status: resp.Status}
+				if resp.StatusCode < 500 { // 4xx is terminal
+					return Permanent(e)
+				}
+				return e
 			}
-			return e
+			return fmt.Errorf("range request returned %s", resp.Status) // e.g. 200 = range ignored
+		}
+		// A 206 must start at the offset we asked for; a server that ignores the
+		// range (or a proxy returning the wrong slice) would otherwise corrupt the
+		// file, since we WriteAt the body bytes at `offset`. Reject it.
+		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
+			return Permanent(fmt.Errorf("server returned wrong range for bytes=%d-%d: %q", offset, c.end, resp.Header.Get("Content-Range")))
 		}
 		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
 		defer body.Stop()
