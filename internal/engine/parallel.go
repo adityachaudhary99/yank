@@ -73,6 +73,8 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		}
 	}
 
+	gctx, cancelGroup := context.WithCancel(ctx)
+	defer cancelGroup()
 	sem := make(chan struct{}, opt.Connections)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -87,10 +89,11 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		go func(c chunk) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := fetchChunk(ctx, opt, f, c, prog, report); err != nil {
+			if err := fetchChunk(gctx, opt, f, c, prog, report); err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
+					cancelGroup() // stop the sibling chunks; don't burn their retries
 				}
 				mu.Unlock()
 			}
