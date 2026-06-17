@@ -161,6 +161,12 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 			}
 			return e
 		}
+		// A 206 must start at the offset we asked for; a server that ignores the
+		// range (or a proxy returning the wrong slice) would otherwise corrupt the
+		// file, since we WriteAt the body bytes at `offset`. Reject it.
+		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
+			return Permanent(fmt.Errorf("server returned wrong range for bytes=%d-%d: %q", offset, c.end, resp.Header.Get("Content-Range")))
+		}
 		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
 		defer body.Stop()
 		buf := make([]byte, 32*1024)

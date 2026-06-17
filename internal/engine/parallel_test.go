@@ -108,3 +108,23 @@ func TestParallelResumeSkipsCompletedChunks(t *testing.T) {
 		t.Fatalf("resume should fetch only the remainder, served %d of %d", s, len(body))
 	}
 }
+
+func TestFetchChunkRejectsMisrangedPartial(t *testing.T) {
+	// Server returns 206 but always from offset 0 (wrong range) — must be rejected.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make([]byte, 4<<20)
+		w.Header().Set("Content-Range", "bytes 0-19/4194304") // always claims 0-, ignores request
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(body[:20])
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	out := filepath.Join(dir, "f.bin")
+	_, err := downloadParallel(context.Background(), Options{
+		URL: srv.URL, OutputPath: out, Connections: 4, Retries: 0, Client: srv.Client(),
+		Sink: progress.NewSilent(),
+	}, &Meta{Size: 4 << 20, SupportsRanges: true, Validator: "etag"}, out)
+	if err == nil {
+		t.Fatal("expected a mis-ranged 206 to be rejected, got nil")
+	}
+}

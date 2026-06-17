@@ -144,6 +144,13 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		if offset > 0 && resp.StatusCode == http.StatusOK {
 			offset = 0
 		}
+		// If we asked for a range and got 206, it must start at our offset —
+		// otherwise the body would be written at the wrong position.
+		if offset > 0 && resp.StatusCode == http.StatusPartialContent {
+			if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
+				return Permanent(fmt.Errorf("server returned wrong range for bytes=%d-: %q", offset, resp.Header.Get("Content-Range")))
+			}
+		}
 		if _, serr := f.Seek(offset, io.SeekStart); serr != nil {
 			return serr
 		}
