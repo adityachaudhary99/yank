@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"io"
 	"os/exec"
 
 	"github.com/adityachaudhary99/yank/internal/classify"
@@ -30,15 +31,32 @@ type Runner interface {
 	Run(ctx context.Context, argv []string) error
 }
 
-// ExecRunner is the production Runner.
-type ExecRunner struct{}
+// ExecRunner is the production Runner. Stdout/Stderr default to the process's
+// standard streams when nil, so the zero value preserves pass-through behavior.
+type ExecRunner struct {
+	Stdout, Stderr io.Writer
+}
 
 func (ExecRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
 
-func (ExecRunner) Run(ctx context.Context, argv []string) error {
+func (r ExecRunner) Run(ctx context.Context, argv []string) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Stdout, cmd.Stderr = osStdout, osStderr
+	cmd.Stdout, cmd.Stderr = r.out(), r.err()
 	return cmd.Run()
+}
+
+func (r ExecRunner) out() io.Writer {
+	if r.Stdout != nil {
+		return r.Stdout
+	}
+	return osStdout
+}
+
+func (r ExecRunner) err() io.Writer {
+	if r.Stderr != nil {
+		return r.Stderr
+	}
+	return osStderr
 }
 
 // Registry maps backend names to implementations.
