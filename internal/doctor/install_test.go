@@ -75,3 +75,23 @@ func TestInstallNonTTYWithoutYesNeverBlocks(t *testing.T) {
 		t.Fatalf("should still print the command, got %q", out.String())
 	}
 }
+
+func TestInstallArgvNonInteractiveAllManagers(t *testing.T) {
+	cases := map[string]string{
+		"apt":    "-y",
+		"dnf":    "-y",
+		"pacman": "--noconfirm",
+		"zypper": "--non-interactive",
+		"apk":    "add",
+		"brew":   "install",
+	}
+	for mgr, want := range cases {
+		joined := strings.Join(InstallArgv(mgr, "rclone"), " ")
+		if !strings.Contains(joined, want) {
+			t.Errorf("InstallArgv(%q) = %q, want it to contain %q", mgr, joined, want)
+		}
+	}
+	if InstallArgv("nope", "x") != nil {
+		t.Error("unknown manager should return nil")
+	}
+}
