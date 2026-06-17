@@ -6,7 +6,11 @@ type Git struct{}
 func (Git) Name() string { return "git" }
 func (Git) Tool() string { return "git" }
 func (Git) Build(req Request) ([]string, error) {
-	argv := []string{"git", "clone", "--depth", "1", req.Source.Raw}
+	argv := []string{"git"}
+	if req.Insecure {
+		argv = append(argv, "-c", "http.sslVerify=false") // must precede the subcommand
+	}
+	argv = append(argv, "clone", "--depth", "1", req.Source.Raw)
 	argv = append(argv, req.Passthrough...)
 	if t := gitTarget(req); t != "" {
 		argv = append(argv, t)

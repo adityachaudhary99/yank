@@ -90,3 +90,34 @@ func TestBackendOutputParity(t *testing.T) {
 		t.Errorf("git -d only: %q", got)
 	}
 }
+
+func TestBackendInsecure(t *testing.T) {
+	src := classify.Classify("https://h/file.bin")
+	out := func(b Backend) string {
+		argv, err := b.Build(Request{Source: src, Insecure: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(argv, " ")
+	}
+	if got := out(Curl{}); !strings.Contains(got, " -k") {
+		t.Errorf("curl insecure: %q", got)
+	}
+	if got := out(Ytdlp{}); !strings.Contains(got, "--no-check-certificates") {
+		t.Errorf("yt-dlp insecure: %q", got)
+	}
+	if got := out(Aria2c{}); !strings.Contains(got, "--check-certificate=false") {
+		t.Errorf("aria2c insecure: %q", got)
+	}
+	if got := out(Rclone{}); !strings.Contains(got, "--no-check-certificate") {
+		t.Errorf("rclone insecure: %q", got)
+	}
+	gitArgv, _ := Git{}.Build(Request{Source: classify.Classify("https://h/r.git"), Insecure: true})
+	if got := strings.Join(gitArgv, " "); !strings.Contains(got, "http.sslVerify=false") {
+		t.Errorf("git insecure: %q", got)
+	}
+	defArgv, _ := Curl{}.Build(Request{Source: src})
+	if got := strings.Join(defArgv, " "); strings.Contains(got, " -k") {
+		t.Errorf("curl should not be insecure by default: %q", got)
+	}
+}

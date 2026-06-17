@@ -182,7 +182,7 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		reg:      reg,
 	}
 	return runDispatch(ctx, deps, src, route.Request{
-		OutputDir: f.dir, Output: f.output, Passthrough: passthrough,
+		OutputDir: f.dir, Output: f.output, Insecure: f.insecure, Passthrough: passthrough,
 	}, spec, f.output, f.dir)
 }
 
@@ -288,7 +288,7 @@ func printPlan(cmd *cobra.Command, f *downloadFlags, src classify.Source, passth
 		if b, ok := backend.DefaultRegistry().Get(src.Backend); ok {
 			// Build with the same -o/-d the real run uses, so the previewed
 			// command matches what dispatch would actually execute.
-			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Passthrough: passthrough}
+			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Insecure: f.insecure, Passthrough: passthrough}
 			if argv, err := b.Build(req); err == nil {
 				cmd.Printf("command: %v\n", argv)
 			}

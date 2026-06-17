@@ -7,6 +7,9 @@ func (Curl) Name() string { return "curl" }
 func (Curl) Tool() string { return "curl" }
 func (Curl) Build(req Request) ([]string, error) {
 	argv := []string{"curl", "-L", "--fail", "--output-dir", dirOrDot(req.OutputDir)}
+	if req.Insecure {
+		argv = append(argv, "-k")
+	}
 	if req.Output != "" {
 		argv = append(argv, "-o", req.Output)
 	} else {

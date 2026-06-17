@@ -7,6 +7,9 @@ func (Ytdlp) Name() string { return "yt-dlp" }
 func (Ytdlp) Tool() string { return "yt-dlp" }
 func (Ytdlp) Build(req Request) ([]string, error) {
 	argv := []string{"yt-dlp", "--no-playlist", "-P", dirOrDot(req.OutputDir)}
+	if req.Insecure {
+		argv = append(argv, "--no-check-certificates")
+	}
 	if req.Output != "" {
 		argv = append(argv, "-o", req.Output)
 	}
