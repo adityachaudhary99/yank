@@ -178,7 +178,7 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 	so, se := dispatchStreams(f)
 	deps := runDispatchDeps{
 		runner:   backend.ExecRunner{Stdout: so, Stderr: se},
-		reporter: newDispatchReporter(cmd.OutOrStdout(), f),
+		reporter: newDispatchReporter(cmd.OutOrStdout(), f, displayName(src.Raw, f.output)),
 		reg:      reg,
 	}
 	return runDispatch(ctx, deps, src, route.Request{

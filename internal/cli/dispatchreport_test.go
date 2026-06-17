@@ -11,7 +11,7 @@ import (
 
 func TestSilentReporterWritesNothing(t *testing.T) {
 	var buf bytes.Buffer
-	r := newDispatchReporter(&buf, &downloadFlags{quiet: true})
+	r := newDispatchReporter(&buf, &downloadFlags{quiet: true}, "f.bin")
 	r.Start("curl", "curl", "u")
 	r.Finish("p", time.Second, "sha256 ok")
 	if buf.Len() != 0 {
@@ -21,7 +21,7 @@ func TestSilentReporterWritesNothing(t *testing.T) {
 
 func TestJSONReporterEvents(t *testing.T) {
 	var buf bytes.Buffer
-	r := newDispatchReporter(&buf, &downloadFlags{jsonOut: true})
+	r := newDispatchReporter(&buf, &downloadFlags{jsonOut: true}, "f.bin")
 	r.Start("rclone", "rclone", "https://x")
 	r.Finish("/tmp/f.bin", 1500*time.Millisecond, "sha256 ok")
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -32,20 +32,20 @@ func TestJSONReporterEvents(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[0]), &start); err != nil {
 		t.Fatal(err)
 	}
-	if start["event"] != "start" || start["backend"] != "rclone" {
+	if start["event"] != "start" || start["backend"] != "rclone" || start["name"] != "f.bin" {
 		t.Fatalf("start=%v", start)
 	}
 	if err := json.Unmarshal([]byte(lines[1]), &done); err != nil {
 		t.Fatal(err)
 	}
-	if done["event"] != "done" || done["checksum"] != "sha256 ok" {
+	if done["event"] != "done" || done["checksum"] != "sha256 ok" || done["name"] != "f.bin" {
 		t.Fatalf("done=%v", done)
 	}
 }
 
 func TestThemedReporterChrome(t *testing.T) {
 	var buf bytes.Buffer
-	r := newDispatchReporter(&buf, &downloadFlags{theme: "catppuccin", ascii: true})
+	r := newDispatchReporter(&buf, &downloadFlags{theme: "catppuccin", ascii: true}, "f.bin")
 	r.Start("curl", "curl", "https://x/y")
 	r.Finish("/tmp/f.bin", time.Second, "")
 	s := buf.String()
