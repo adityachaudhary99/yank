@@ -7,6 +7,9 @@ func (Ytdlp) Name() string { return "yt-dlp" }
 func (Ytdlp) Tool() string { return "yt-dlp" }
 func (Ytdlp) Build(req Request) ([]string, error) {
 	argv := []string{"yt-dlp", "--no-playlist", "-P", dirOrDot(req.OutputDir)}
+	if req.Output != "" {
+		argv = append(argv, "-o", req.Output)
+	}
 	argv = append(argv, req.Passthrough...)
 	argv = append(argv, req.Source.Raw)
 	return argv, nil

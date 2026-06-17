@@ -7,7 +7,12 @@ type Rclone struct{}
 func (Rclone) Name() string { return "rclone" }
 func (Rclone) Tool() string { return "rclone" }
 func (Rclone) Build(req Request) ([]string, error) {
-	argv := []string{"rclone", "copyurl", req.Source.Raw, dirOrDot(req.OutputDir), "--auto-filename"}
+	argv := []string{"rclone", "copyurl", req.Source.Raw}
+	if req.Output != "" {
+		argv = append(argv, target(req.OutputDir, req.Output))
+	} else {
+		argv = append(argv, dirOrDot(req.OutputDir), "--auto-filename")
+	}
 	argv = append(argv, req.Passthrough...)
 	return argv, nil
 }

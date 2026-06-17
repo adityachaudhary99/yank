@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,5 +49,44 @@ func TestRcloneBackend(t *testing.T) {
 	got := argvOf(t, Rclone{}, "https://drive.google.com/file/d/ABC/view", "/tmp")
 	if !strings.HasPrefix(got, "rclone") {
 		t.Fatalf("rclone argv = %q", got)
+	}
+}
+
+func TestBackendOutputParity(t *testing.T) {
+	src := classify.Classify("https://h/file.bin")
+	out := func(b Backend, output, dir string) string {
+		argv, err := b.Build(Request{Source: src, Output: output, OutputDir: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(argv, " ")
+	}
+	if got := out(Curl{}, "out.bin", "/tmp"); !strings.Contains(got, "-o out.bin") || strings.Contains(got, " -O") {
+		t.Errorf("curl -o: %q", got)
+	}
+	if got := out(Curl{}, "", "/tmp"); !strings.Contains(got, " -O") {
+		t.Errorf("curl no -o should keep -O: %q", got)
+	}
+	if got := out(Ytdlp{}, "v.mp4", "/tmp"); !strings.Contains(got, "-o v.mp4") {
+		t.Errorf("yt-dlp -o: %q", got)
+	}
+	if got := out(Aria2c{}, "t.bin", "/tmp"); !strings.Contains(got, "--out=t.bin") {
+		t.Errorf("aria2c -o: %q", got)
+	}
+	if got := out(Rclone{}, "f.bin", "/tmp"); !strings.Contains(got, filepath.Join("/tmp", "f.bin")) || strings.Contains(got, "--auto-filename") {
+		t.Errorf("rclone -o: %q", got)
+	}
+	if got := out(Rclone{}, "", "/tmp"); !strings.Contains(got, "--auto-filename") {
+		t.Errorf("rclone no -o should keep --auto-filename: %q", got)
+	}
+	gitClone := func(output, dir string) string {
+		argv, _ := Git{}.Build(Request{Source: classify.Classify("https://github.com/cli/cli.git"), Output: output, OutputDir: dir})
+		return strings.Join(argv, " ")
+	}
+	if got := gitClone("myclone", "/tmp"); !strings.Contains(got, filepath.Join("/tmp", "myclone")) {
+		t.Errorf("git -o -d: %q", got)
+	}
+	if got := gitClone("", "/tmp"); !strings.Contains(got, filepath.Join("/tmp", "cli")) {
+		t.Errorf("git -d only: %q", got)
 	}
 }
