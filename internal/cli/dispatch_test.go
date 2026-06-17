@@ -32,3 +32,16 @@ func TestDryRunShowsNativeForHTTP(t *testing.T) {
 		t.Fatalf("dry-run output = %q", out.String())
 	}
 }
+
+func TestDryRunReflectsOutputName(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCmd(BuildInfo{Version: "test"})
+	root.SetOut(&out)
+	root.SetArgs([]string{"--dry-run", "--backend", "curl", "-o", "out.bin", "ftp://h/x.tar.gz"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "-o out.bin") {
+		t.Fatalf("dry-run command should reflect -o: %q", out.String())
+	}
+}

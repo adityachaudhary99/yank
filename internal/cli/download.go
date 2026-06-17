@@ -69,7 +69,7 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 			}
 		}
 		if f.dryRun {
-			printPlan(cmd, src, passthrough)
+			printPlan(cmd, f, src, passthrough)
 			continue
 		}
 		var err error
@@ -280,13 +280,15 @@ func displayName(raw, output string) string {
 	return "download"
 }
 
-func printPlan(cmd *cobra.Command, src classify.Source, passthrough []string) {
+func printPlan(cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) {
 	cmd.Printf("url:     %s\n", src.Raw)
 	cmd.Printf("type:    %s\n", src.Type)
 	cmd.Printf("backend: %s\n", src.Backend)
 	if src.Backend != "native" {
 		if b, ok := backend.DefaultRegistry().Get(src.Backend); ok {
-			req := backend.Request{Source: src, Passthrough: passthrough}
+			// Build with the same -o/-d the real run uses, so the previewed
+			// command matches what dispatch would actually execute.
+			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Passthrough: passthrough}
 			if argv, err := b.Build(req); err == nil {
 				cmd.Printf("command: %v\n", argv)
 			}
