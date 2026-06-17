@@ -85,6 +85,13 @@ yank [flags] <url>...
       --insecure           skip TLS certificate verification
 ```
 
+These flags behave the **same on every route**. Whether yank downloads natively
+or dispatches to git / yt-dlp / aria2c / rclone / curl, you get the same chrome,
+and `--quiet`, `--json`, and `-o`/`-d` work identically. `--checksum` is verified
+for single-file dispatched downloads (`curl`, `rclone`) when you pass an explicit
+`-o`; for other backends it fails fast with a clear message rather than silently
+skipping.
+
 Examples:
 
 ```sh
@@ -97,8 +104,12 @@ yank https://api.example.com/artifact -H 'Accept: application/octet-stream' --be
 # download several files; exit code 7 if some (but not all) fail
 yank https://a/x.bin https://b/y.bin -d ./downloads
 
-# script-friendly progress
+# script-friendly progress — works the same for a dispatched backend
 yank --json https://example.com/big.iso | jq -c .
+yank --json --backend rclone -o data.csv "https://storage.example.com/data.csv" | jq -c .
+
+# quiet a dispatched clone (no backend chatter, just yank's result)
+yank --quiet --backend git -o ./cli https://github.com/cli/cli
 ```
 
 ## Backend tools
@@ -153,7 +164,12 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
 
 ## Roadmap
 
-- **Native Google Drive** via `gdown` — Drive *share* links currently route to `rclone`, which only handles direct cloud-object URLs (S3 / GCS / Dropbox direct); first-class Drive support is planned for **v0.3**.
+- **v0.3 (shipped)** — one UX across every route: unified chrome, `--quiet` /
+  `--json`, `-o`/`-d` parity, and checksums over dispatched single-file backends.
+- **v0.4 (next)** — native Google Drive via `gdown` (Drive *share* links
+  currently route to `rclone`, which only handles direct cloud-object URLs like
+  S3 / GCS / Dropbox direct), plus `--limit-rate`, cookies / `--netrc`, mirrors,
+  and verification against a remote `checksums.txt`.
 
 ## License
 

@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-18
+
+One UX across every route. Dispatched backends (git, yt-dlp, aria2c, rclone,
+curl) now share the affordances the native engine already had.
+
+### Added
+
+- **Unified chrome** — every dispatched run is bracketed by a themed header
+  before and a result card after, so all routes look like yank ran them.
+- **`--quiet` and `--json` over dispatched backends** — `--quiet` suppresses the
+  backend's own output; `--json` emits newline-delimited `start`/`done`/`error`
+  lifecycle events and discards the tool's human output (so the stream stays
+  valid JSON). Previously both were ignored on the dispatch path.
+- **`-o` parity** — `-o <name>` is honored by every backend, not just `git`:
+  curl `-o`, yt-dlp `-o`, aria2c `--out=`, rclone explicit dest, git clone
+  target. `-d <dir>` is now also honored by `git` (clones into `<dir>/<repo>`).
+- **Backend checksums** — `--checksum`/`--sha256` is verified after a single-file
+  dispatched download (`curl`, `rclone`) when an explicit `-o` is given.
+
+### Changed
+
+- `--checksum` on a dispatched backend is now explicit instead of silently
+  ignored: it verifies for `curl`/`rclone` with `-o`, and otherwise fails fast
+  with a clear message (git, yt-dlp, aria2c, or a missing `-o`, where the output
+  file can't be identified).
+- `--dry-run` now reflects the `-o`/`-d` you passed in the previewed backend
+  command, so the preview matches what dispatch would actually execute.
+
 ## [0.2.0] - 2026-06-13
 
 ### Changed
@@ -86,6 +114,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.3.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.0
 [0.2.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.2.0
 [0.1.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.1
 [0.1.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.1.0
