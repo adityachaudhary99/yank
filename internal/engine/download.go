@@ -134,7 +134,7 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 400 {
-			e := fmt.Errorf("server returned %s", resp.Status)
+			e := &StatusError{Code: resp.StatusCode, Status: resp.Status}
 			if resp.StatusCode < 500 { // 4xx won't fix itself — don't retry
 				return Permanent(e)
 			}

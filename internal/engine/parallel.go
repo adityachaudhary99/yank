@@ -158,11 +158,14 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusPartialContent {
-			e := fmt.Errorf("range request returned %s", resp.Status)
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 { // 4xx is terminal
-				return Permanent(e)
+			if resp.StatusCode >= 400 {
+				e := &StatusError{Code: resp.StatusCode, Status: resp.Status}
+				if resp.StatusCode < 500 { // 4xx is terminal
+					return Permanent(e)
+				}
+				return e
 			}
-			return e
+			return fmt.Errorf("range request returned %s", resp.Status) // e.g. 200 = range ignored
 		}
 		// A 206 must start at the offset we asked for; a server that ignores the
 		// range (or a proxy returning the wrong slice) would otherwise corrupt the

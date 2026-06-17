@@ -17,6 +17,15 @@ func (p permanent) Unwrap() error { return p.err }
 // (unwrapped) instead of burning the remaining attempts on a hopeless request.
 func Permanent(err error) error { return permanent{err} }
 
+// StatusError carries a non-2xx HTTP status so the CLI can map a server-side
+// failure to the right exit code (5xx → network).
+type StatusError struct {
+	Code   int
+	Status string
+}
+
+func (e *StatusError) Error() string { return "server returned " + e.Status }
+
 // withRetry runs fn up to retries+1 times with exponential backoff + jitter.
 // A Permanent-wrapped error stops the loop at once and is returned unwrapped.
 func withRetry(ctx context.Context, retries int, base time.Duration, fn func() error) error {
