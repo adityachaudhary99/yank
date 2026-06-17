@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -238,20 +239,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if err != nil {
 		return err
 	}
-	client := http.DefaultClient
-	if f.insecure || f.timeout > 0 {
-		tr := &http.Transport{}
-		if f.insecure {
-			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		}
-		if f.timeout > 0 {
-			tr.ResponseHeaderTimeout = f.timeout
-			tr.DialContext = (&net.Dialer{Timeout: f.timeout}).DialContext
-		}
-		// No Client.Timeout: it would cap the whole transfer; stalls are handled
-		// per-read in the engine (Options.StallTimeout).
-		client = &http.Client{Transport: tr}
-	}
+	client := newHTTPClient(f, hdr)
 	conns := f.connections
 	if f.noParallel {
 		conns = 1
@@ -263,6 +251,37 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		StallTimeout: f.timeout,
 	})
 	return err
+}
+
+// newHTTPClient builds the native HTTP client. It applies --insecure / --timeout
+// at the transport layer and installs a CheckRedirect that drops yank-injected
+// headers (the keys in `injected`) when a redirect crosses to a different host,
+// so --header / --bearer / --user secrets never leak to a redirect target.
+func newHTTPClient(f *downloadFlags, injected http.Header) *http.Client {
+	tr := &http.Transport{}
+	if f.insecure {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	if f.timeout > 0 {
+		// No Client.Timeout: it would cap the whole transfer; stalls are handled
+		// per-read in the engine (Options.StallTimeout).
+		tr.ResponseHeaderTimeout = f.timeout
+		tr.DialContext = (&net.Dialer{Timeout: f.timeout}).DialContext
+	}
+	return &http.Client{
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			if req.URL.Host != via[0].URL.Host {
+				for k := range injected {
+					req.Header.Del(k)
+				}
+			}
+			return nil
+		},
+	}
 }
 
 // displayName is the best-effort transfer label for the live bar: the output
