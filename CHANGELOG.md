@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-18
+
+First cut of "Expand" — new coverage and new control.
+
+### Added
+- **Google Drive / Docs** support via `gdown`: `drive.google.com` and
+  `docs.google.com` share links now download through gdown, which clears Drive's
+  confirmation interstitial that a plain GET or `rclone copyurl` cannot. yank
+  reports a `pipx install gdown` hint when gdown is missing (it's a pip tool, so
+  yank won't auto-install it through a system package manager).
+- **`--limit-rate`** (e.g. `500k`, `1M`): caps the download rate. On the native
+  engine it's a token-bucket throttle shared across all parallel connections (an
+  overall cap); on dispatched backends it maps to the tool's own flag
+  (curl `--limit-rate`, aria2c `--max-overall-download-limit`, yt-dlp
+  `--limit-rate`, rclone `--bwlimit`).
+
+### Changed
+- Google Drive/Docs links now route to `gdown` instead of `rclone` (other cloud
+  hosts — S3, GCS, Dropbox — still use `rclone`).
+- `doctor` and `install-deps` derive their tool list from the backend registry,
+  so newly added backends (like gdown) appear automatically.
+
 ## [0.3.1] - 2026-06-18
 
 Hardening release from a post-v0.3.0 code review. No new features.
@@ -140,6 +162,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.4.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.0
 [0.3.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.1
 [0.3.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.0
 [0.2.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.2.0

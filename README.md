@@ -53,12 +53,13 @@ Debian/Ubuntu (`.deb`) and Homebrew/AUR/Snap packages ship with releases.
 | `ftp://…` | ftp | `curl` |
 | `github.com/…`, `gitlab.com/…`, `*.git`, `git@…` | repo | `git clone` |
 | `youtube.com`, `youtu.be`, `vimeo`, `twitch`, … | media | `yt-dlp` |
-| `drive.google.com`, `dropbox.com`, S3, GCS, … | cloud | `rclone` |
+| `drive.google.com`, `docs.google.com` | cloud | `gdown` |
+| `dropbox.com`, S3, GCS, … | cloud | `rclone` |
 | `magnet:…`, `*.torrent` | torrent | `aria2c` |
 
 Not sure what `yank` will do? Add `--dry-run` to see the plan without downloading.
 
-> **Google Drive note:** share links (`drive.google.com/file/d/…`) aren't first-class yet. They classify as cloud and route to `rclone`, which downloads direct cloud objects (S3 / GCS / Dropbox direct) but *not* Drive's share interstitial. Native Drive support via `gdown` is on the [roadmap](#roadmap).
+> **Google Drive:** share links (`drive.google.com/file/d/…`, `docs.google.com/…`) route to [`gdown`](https://github.com/wkentaro/gdown), which clears Drive's confirmation interstitial that a plain GET or `rclone copyurl` cannot. gdown is a Python tool — if it's missing, yank prints `pipx install gdown` (it won't auto-install a pip tool through your system package manager).
 
 ## Usage
 
@@ -74,13 +75,14 @@ yank [flags] <url>...
   -q, --quiet              suppress progress output
       --checksum <a:hex>   verify download, e.g. sha256:abc...
       --sha256 <hex>       shorthand for --checksum sha256:<hex>
-      --backend <name>     force a backend: auto|native|curl|rclone|git|yt-dlp|aria2c
+      --backend <name>     force a backend: auto|native|curl|rclone|git|yt-dlp|aria2c|gdown
       --dry-run            show classification + command, download nothing
   -H, --header <K: V>      add a request header (repeatable)
   -u, --user <user:pass>   HTTP basic auth
       --bearer <token>     bearer token
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
+      --limit-rate <rate>  cap the download rate, e.g. 500k or 1M
       --timeout <dur>      abort if a transfer stalls (no data) this long, e.g. 30s
       --insecure           skip TLS verification (native + dispatched backends)
 ```
@@ -166,10 +168,11 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
 
 - **v0.3 (shipped)** — one UX across every route: unified chrome, `--quiet` /
   `--json`, `-o`/`-d` parity, and checksums over dispatched single-file backends.
-- **v0.4 (next)** — native Google Drive via `gdown` (Drive *share* links
-  currently route to `rclone`, which only handles direct cloud-object URLs like
-  S3 / GCS / Dropbox direct), plus `--limit-rate`, cookies / `--netrc`, mirrors,
-  and verification against a remote `checksums.txt`.
+- **v0.4.0 (shipped)** — Google Drive / Docs via `gdown`, and `--limit-rate`
+  across the native engine and dispatched backends.
+- **v0.4.x (next)** — cookies / `--netrc`, mirrors, verification against a remote
+  `checksums.txt` (and sibling `.sha256`), a `yank config` subcommand, and
+  parallel multi-URL downloads.
 
 ## License
 
