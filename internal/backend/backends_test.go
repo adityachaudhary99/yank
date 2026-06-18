@@ -154,3 +154,20 @@ func TestBackendRateLimit(t *testing.T) {
 		t.Errorf("rclone rate: %q", got)
 	}
 }
+
+func TestBackendCookiesNetrc(t *testing.T) {
+	src := classify.Classify("https://h/f.bin")
+	out := func(b Backend) string {
+		argv, _ := b.Build(Request{Source: src, Cookies: "cj.txt", Netrc: true})
+		return strings.Join(argv, " ")
+	}
+	if got := out(Curl{}); !strings.Contains(got, "-b cj.txt") || !strings.Contains(got, "--netrc") {
+		t.Errorf("curl: %q", got)
+	}
+	if got := out(Ytdlp{}); !strings.Contains(got, "--cookies cj.txt") || !strings.Contains(got, "--netrc") {
+		t.Errorf("yt-dlp: %q", got)
+	}
+	if got := out(Aria2c{}); !strings.Contains(got, "--load-cookies=cj.txt") {
+		t.Errorf("aria2c: %q", got)
+	}
+}

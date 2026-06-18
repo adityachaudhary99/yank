@@ -81,6 +81,8 @@ yank [flags] <url>...
   -H, --header <K: V>      add a request header (repeatable)
   -u, --user <user:pass>   HTTP basic auth
       --bearer <token>     bearer token
+      --cookies <file>     send a Netscape cookie jar with requests
+      --netrc              use ~/.netrc (or $NETRC) for host credentials
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
       --limit-rate <rate>  cap the download rate, e.g. 500k or 1M
@@ -176,8 +178,10 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
   across the native engine and dispatched backends.
 - **v0.4.1 (shipped)** — `--checksums <url|file>`: verify against a published
   `sha256sum`-style checksums file.
-- **v0.4.x (next)** — cookies / `--netrc`, mirrors, a sibling-`.sha256`
-  auto-probe, a `yank config` subcommand, and parallel multi-URL downloads.
+- **v0.4.2 (shipped)** — `--cookies <file>` (Netscape jar) and `--netrc` auth,
+  on the native engine and curl / yt-dlp / aria2c.
+- **v0.4.x (next)** — mirrors, a sibling-`.sha256` auto-probe, a `yank config`
+  subcommand, and parallel multi-URL downloads.
 
 ## License
 

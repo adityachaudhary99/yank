@@ -13,6 +13,9 @@ func (Aria2c) Build(req Request) ([]string, error) {
 	if req.RateLimit != "" {
 		argv = append(argv, "--max-overall-download-limit="+req.RateLimit)
 	}
+	if req.Cookies != "" {
+		argv = append(argv, "--load-cookies="+req.Cookies)
+	}
 	if req.Output != "" {
 		argv = append(argv, "--out="+req.Output)
 	}

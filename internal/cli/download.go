@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path"
@@ -46,6 +47,8 @@ type downloadFlags struct {
 	timeout      time.Duration
 	insecure     bool
 	limitRate    string
+	cookiesFile  string
+	netrc        bool
 	theme        string
 	ascii        bool
 	color        bool
@@ -177,7 +180,11 @@ func loadChecksums(cmd *cobra.Command, f *downloadFlags, src string) ([]byte, er
 				req.Header.Add(k, v)
 			}
 		}
-		resp, err := newHTTPClient(f, hdr).Do(req)
+		client, cerr := newHTTPClient(f, hdr)
+		if cerr != nil {
+			return nil, cerr
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -272,7 +279,8 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		reg:      reg,
 	}
 	return runDispatch(ctx, deps, src, route.Request{
-		OutputDir: f.dir, Output: f.output, Insecure: f.insecure, RateLimit: f.limitRate, Passthrough: passthrough,
+		OutputDir: f.dir, Output: f.output, Insecure: f.insecure, RateLimit: f.limitRate,
+		Cookies: f.cookiesFile, Netrc: f.netrc, Passthrough: passthrough,
 	}, spec, f.output, f.dir)
 }
 
@@ -330,7 +338,11 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		algo, _, _ = strings.Cut(sum, ":")
 	}
 	sink := newProgressSink(cmd.OutOrStdout(), f, displayName(raw, f.output), algo)
-	hdr, err := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: f.basic, Bearer: f.bearer})
+	basic := f.basic
+	if nb := netrcBasicFor(f, raw); nb != "" {
+		basic = nb
+	}
+	hdr, err := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: basic, Bearer: f.bearer})
 	if err != nil {
 		return err
 	}
@@ -338,7 +350,10 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if rerr != nil {
 		return withCode(ExitUsage, rerr)
 	}
-	client := newHTTPClient(f, hdr)
+	client, err := newHTTPClient(f, hdr)
+	if err != nil {
+		return withCode(ExitUsage, err)
+	}
 	conns := f.connections
 	if f.noParallel {
 		conns = 1
@@ -356,7 +371,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 // at the transport layer and installs a CheckRedirect that drops yank-injected
 // headers (the keys in `injected`) when a redirect crosses to a different host,
 // so --header / --bearer / --user secrets never leak to a redirect target.
-func newHTTPClient(f *downloadFlags, injected http.Header) *http.Client {
+func newHTTPClient(f *downloadFlags, injected http.Header) (*http.Client, error) {
 	tr := &http.Transport{}
 	if f.insecure {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -367,7 +382,7 @@ func newHTTPClient(f *downloadFlags, injected http.Header) *http.Client {
 		tr.ResponseHeaderTimeout = f.timeout
 		tr.DialContext = (&net.Dialer{Timeout: f.timeout}).DialContext
 	}
-	return &http.Client{
+	c := &http.Client{
 		Transport: tr,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
@@ -381,6 +396,65 @@ func newHTTPClient(f *downloadFlags, injected http.Header) *http.Client {
 			return nil
 		},
 	}
+	if f.cookiesFile != "" {
+		jar, err := cookieJar(f.cookiesFile)
+		if err != nil {
+			return nil, err
+		}
+		c.Jar = jar
+	}
+	return c, nil
+}
+
+// cookieJar builds an http.CookieJar from a Netscape cookie file, so Go attaches
+// the matching cookies to every request (including across redirects).
+func cookieJar(path string) (http.CookieJar, error) {
+	data, err := os.ReadFile(config.ExpandPath(path))
+	if err != nil {
+		return nil, err
+	}
+	cookies, err := auth.ParseCookies(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	jar, _ := cookiejar.New(nil)
+	byHost := map[string][]*http.Cookie{}
+	for _, c := range cookies {
+		h := strings.TrimPrefix(c.Domain, ".")
+		byHost[h] = append(byHost[h], c)
+	}
+	for host, cs := range byHost {
+		jar.SetCookies(&url.URL{Scheme: "https", Host: host}, cs)
+	}
+	return jar, nil
+}
+
+// netrcBasicFor returns "user:pass" from ~/.netrc (or $NETRC) for raw's host when
+// --netrc is set and no explicit -u/--bearer was given; "" otherwise.
+func netrcBasicFor(f *downloadFlags, raw string) string {
+	if !f.netrc || f.basic != "" || f.bearer != "" {
+		return ""
+	}
+	path := os.Getenv("NETRC")
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		path = filepath.Join(home, ".netrc")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if user, pass, ok := auth.NetrcCreds(bytes.NewReader(data), u.Hostname()); ok && user != "" {
+		return user + ":" + pass
+	}
+	return ""
 }
 
 // displayName is the best-effort transfer label for the live bar: the output
@@ -406,7 +480,7 @@ func printPlan(cmd *cobra.Command, f *downloadFlags, src classify.Source, passth
 		if b, ok := backend.DefaultRegistry().Get(src.Backend); ok {
 			// Build with the same -o/-d the real run uses, so the previewed
 			// command matches what dispatch would actually execute.
-			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Insecure: f.insecure, RateLimit: f.limitRate, Passthrough: passthrough}
+			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Insecure: f.insecure, RateLimit: f.limitRate, Cookies: f.cookiesFile, Netrc: f.netrc, Passthrough: passthrough}
 			if argv, err := b.Build(req); err == nil {
 				cmd.Printf("command: %v\n", argv)
 			}

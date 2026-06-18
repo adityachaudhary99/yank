@@ -13,6 +13,12 @@ func (Ytdlp) Build(req Request) ([]string, error) {
 	if req.RateLimit != "" {
 		argv = append(argv, "--limit-rate", req.RateLimit)
 	}
+	if req.Cookies != "" {
+		argv = append(argv, "--cookies", req.Cookies)
+	}
+	if req.Netrc {
+		argv = append(argv, "--netrc")
+	}
 	if req.Output != "" {
 		argv = append(argv, "-o", req.Output)
 	}
