@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-06-18
+
+Polish ("Polish") — the last cut from the UX audit: standard color control,
+a debug surface, and errors that point at the fix.
+
+### Added
+- **`--color auto|always|never`** — standard tri-state color control. `auto`
+  (default) colorizes only on a TTY; `always` forces it through a pipe; `never`
+  disables it. `FORCE_COLOR` now also forces color in `auto`, complementing the
+  already-honored `NO_COLOR`. `--ascii` still drops both color *and* unicode.
+- **`-v, --verbose`** — explain the routing decision on stderr before the
+  transfer: the chosen backend and source type, the resolved output target, and
+  (for a dispatched backend) the exact argv. Like `--dry-run`, but it still runs.
+- **Error next-step hints** — a checksum mismatch now suggests `--fresh`
+  (re-download from scratch), and an unsupported source suggests `--backend`.
+
 ## [0.6.1] - 2026-06-18
 
 ### Added

@@ -35,7 +35,7 @@ func newDispatchReporter(out io.Writer, f *downloadFlags, name string) dispatchR
 		Getenv:     os.Getenv,
 		IsTTY:      isTerminal(out),
 		Width:      terminalWidth(out),
-		ColorCfg:   f.color,
+		Color:      f.colorMode,
 		ForceASCII: f.ascii,
 	})
 	return &themedReporter{out: out, theme: theme, caps: caps}

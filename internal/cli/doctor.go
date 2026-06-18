@@ -25,7 +25,7 @@ func newDoctorCmd(f *downloadFlags) *cobra.Command {
 			}
 			caps := ui.Detect(ui.Env{
 				Getenv: os.Getenv, IsTTY: isTerminal(out), Width: terminalWidth(out),
-				ColorCfg: f.color, ForceASCII: f.ascii,
+				Color: f.colorMode, ForceASCII: f.ascii,
 			})
 			g := theme.Glyphs(caps)
 			mgr := resolveAndRememberManager(f)

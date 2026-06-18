@@ -15,11 +15,13 @@ type Env struct {
 	Getenv     func(string) string
 	IsTTY      bool
 	Width      int
-	ColorCfg   bool // config "color"
-	ForceASCII bool // --ascii flag
+	Color      string // "auto" (default) | "always" | "never"
+	ForceASCII bool   // --ascii flag (forces no color and no unicode)
 }
 
-// Detect computes Capabilities from the environment.
+// Detect computes Capabilities from the environment. Color precedence: --ascii or
+// --color=never disable; --color=always enables; otherwise "auto" = on when a TTY
+// with NO_COLOR unset, and FORCE_COLOR forces it on (e.g. through a pipe).
 func Detect(e Env) Capabilities {
 	get := e.Getenv
 	if get == nil {
@@ -29,7 +31,18 @@ func Detect(e Env) Capabilities {
 	if width <= 0 {
 		width = 80
 	}
-	color := e.IsTTY && e.ColorCfg && get("NO_COLOR") == ""
+	var color bool
+	switch {
+	case e.ForceASCII, e.Color == "never":
+		color = false
+	case e.Color == "always":
+		color = true
+	default: // auto
+		color = e.IsTTY && get("NO_COLOR") == ""
+		if get("FORCE_COLOR") != "" {
+			color = true
+		}
+	}
 	unicode := !e.ForceASCII && localeIsUTF8(get)
 	return Capabilities{TTY: e.IsTTY, Color: color, Unicode: unicode, Width: width}
 }
