@@ -75,6 +75,7 @@ yank [flags] <url>...
   -q, --quiet              suppress progress output
       --checksum <a:hex>   verify download, e.g. sha256:abc...
       --sha256 <hex>       shorthand for --checksum sha256:<hex>
+      --checksums <src>    verify against a checksums file (path or http(s) URL)
       --backend <name>     force a backend: auto|native|curl|rclone|git|yt-dlp|aria2c|gdown
       --dry-run            show classification + command, download nothing
   -H, --header <K: V>      add a request header (repeatable)
@@ -99,6 +100,9 @@ Examples:
 ```sh
 # verify a download against a known hash
 yank https://example.com/app.tar.gz --sha256 2cf24dba5fb0...
+
+# or verify against a published checksums file (matched by filename)
+yank https://example.com/app.tar.gz --checksums https://example.com/SHA256SUMS
 
 # authenticated API download with a bearer token
 yank https://api.example.com/artifact -H 'Accept: application/octet-stream' --bearer "$TOKEN"
@@ -170,9 +174,10 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
   `--json`, `-o`/`-d` parity, and checksums over dispatched single-file backends.
 - **v0.4.0 (shipped)** — Google Drive / Docs via `gdown`, and `--limit-rate`
   across the native engine and dispatched backends.
-- **v0.4.x (next)** — cookies / `--netrc`, mirrors, verification against a remote
-  `checksums.txt` (and sibling `.sha256`), a `yank config` subcommand, and
-  parallel multi-URL downloads.
+- **v0.4.1 (shipped)** — `--checksums <url|file>`: verify against a published
+  `sha256sum`-style checksums file.
+- **v0.4.x (next)** — cookies / `--netrc`, mirrors, a sibling-`.sha256`
+  auto-probe, a `yank config` subcommand, and parallel multi-URL downloads.
 
 ## License
 

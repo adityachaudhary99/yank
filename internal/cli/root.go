@@ -49,6 +49,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVarP(&f.force, "force", "f", false, "overwrite existing files")
 	pf.BoolVarP(&f.quiet, "quiet", "q", false, "suppress progress output")
 	pf.StringVar(&f.checksum, "checksum", "", "verify download: algo:hex")
+	pf.StringVar(&f.checksumsSrc, "checksums", "", "verify against a checksums file (path or http(s) URL)")
 	pf.String("sha256", "", "shorthand for --checksum sha256:<hex>")
 	pf.StringVar(&f.backend, "backend", "auto", "force backend: auto|native|curl|rclone|git|yt-dlp|aria2c")
 	pf.BoolVar(&f.dryRun, "dry-run", false, "show classification and command without downloading")
