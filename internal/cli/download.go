@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,29 +28,30 @@ import (
 )
 
 type downloadFlags struct {
-	output      string
-	dir         string
-	connections int
-	retries     int
-	force       bool
-	quiet       bool
-	checksum    string
-	backend     string
-	dryRun      bool
-	headers     []string
-	basic       string
-	bearer      string
-	jsonOut     bool
-	noParallel  bool
-	timeout     time.Duration
-	insecure    bool
-	limitRate   string
-	theme       string
-	ascii       bool
-	color       bool
-	yes         bool
-	printDeps   bool
-	pm          string
+	output       string
+	dir          string
+	connections  int
+	retries      int
+	force        bool
+	quiet        bool
+	checksum     string
+	checksumsSrc string
+	backend      string
+	dryRun       bool
+	headers      []string
+	basic        string
+	bearer       string
+	jsonOut      bool
+	noParallel   bool
+	timeout      time.Duration
+	insecure     bool
+	limitRate    string
+	theme        string
+	ascii        bool
+	color        bool
+	yes          bool
+	printDeps    bool
+	pm           string
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
@@ -119,6 +122,88 @@ func checksumSpec(cmd *cobra.Command, f *downloadFlags) (spec, algo string) {
 	return spec, algo
 }
 
+// effectiveChecksum resolves the checksum spec ("algo:hex") for raw: an explicit
+// --checksum/--sha256 wins; otherwise --checksums (a file path or URL) is loaded,
+// parsed, and matched to the target's base name; otherwise "".
+func effectiveChecksum(cmd *cobra.Command, f *downloadFlags, raw string) (string, error) {
+	if spec, _ := checksumSpec(cmd, f); spec != "" {
+		return spec, nil
+	}
+	if f.checksumsSrc == "" {
+		return "", nil
+	}
+	data, err := loadChecksums(cmd, f, f.checksumsSrc)
+	if err != nil {
+		return "", withCode(ExitUsage, err)
+	}
+	sums, err := checksum.ParseSums(bytes.NewReader(data))
+	if err != nil {
+		return "", withCode(ExitUsage, err)
+	}
+	name := checksumTargetName(raw, f.output)
+	hex, ok := sums[name]
+	if !ok {
+		hex, ok = sums[""] // a single bare-hash checksums file
+	}
+	if !ok {
+		return "", withCode(ExitUsage, fmt.Errorf("no checksum for %q in %s", name, f.checksumsSrc))
+	}
+	algo, err := checksum.AlgoForHex(hex)
+	if err != nil {
+		return "", withCode(ExitUsage, err)
+	}
+	return algo + ":" + hex, nil
+}
+
+// loadChecksums reads a checksums source: an http(s) URL is fetched with the
+// native client (honoring --insecure/--timeout/auth headers); anything else is a
+// local file path.
+func loadChecksums(cmd *cobra.Command, f *downloadFlags, src string) ([]byte, error) {
+	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		hdr, herr := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: f.basic, Bearer: f.bearer})
+		if herr != nil {
+			return nil, herr
+		}
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+		if rerr != nil {
+			return nil, rerr
+		}
+		for k, vs := range hdr {
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
+		}
+		resp, err := newHTTPClient(f, hdr).Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("fetching %s: %s", src, resp.Status)
+		}
+		return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	}
+	return os.ReadFile(config.ExpandPath(src))
+}
+
+// checksumTargetName is the base filename to match in a checksums file: the -o
+// base when set, else the URL's last path segment.
+func checksumTargetName(raw, output string) string {
+	if output != "" {
+		return path.Base(output)
+	}
+	if u, err := url.Parse(raw); err == nil {
+		if b := path.Base(u.Path); b != "" && b != "/" && b != "." {
+			return b
+		}
+	}
+	return ""
+}
+
 // resolvedDispatchPath is the file a dispatched backend writes given -o/-d, or ""
 // when no -o was set (auto-named results are not knowable up front).
 func resolvedDispatchPath(output, dir string) string {
@@ -146,7 +231,10 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 	}
 
 	// R9b: gate checksum before any install or transfer.
-	spec, _ := checksumSpec(cmd, f)
+	spec, cerr := effectiveChecksum(cmd, f, src.Raw)
+	if cerr != nil {
+		return cerr
+	}
 	if spec != "" {
 		if !checksumCapableBackends[src.Backend] {
 			return withCode(ExitUsage, fmt.Errorf("checksum verification is not supported for %s", src.Backend))
@@ -233,7 +321,14 @@ func runDispatch(ctx context.Context, d runDispatchDeps, src classify.Source, re
 }
 
 func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string) error {
-	sum, algo := checksumSpec(cmd, f)
+	sum, err := effectiveChecksum(cmd, f, raw)
+	if err != nil {
+		return err
+	}
+	algo := ""
+	if sum != "" {
+		algo, _, _ = strings.Cut(sum, ":")
+	}
 	sink := newProgressSink(cmd.OutOrStdout(), f, displayName(raw, f.output), algo)
 	hdr, err := auth.BuildHeaders(auth.Options{Headers: f.headers, Basic: f.basic, Bearer: f.bearer})
 	if err != nil {
