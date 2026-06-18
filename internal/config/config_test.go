@@ -94,3 +94,25 @@ func TestDirTildeExpanded(t *testing.T) {
 		t.Errorf("Dir = %q want %q", c.Dir, want)
 	}
 }
+
+func TestConfigGetSet(t *testing.T) {
+	c := Defaults()
+	if err := c.Set("connections", "16"); err != nil || c.Connections != 16 {
+		t.Fatalf("set connections: %v c=%d", err, c.Connections)
+	}
+	if err := c.Set("color", "false"); err != nil || c.Color != false {
+		t.Fatalf("set color: %v", err)
+	}
+	if err := c.Set("connections", "abc"); err == nil {
+		t.Fatal("non-int connections should error")
+	}
+	if err := c.Set("nope", "x"); err == nil {
+		t.Fatal("unknown key should error")
+	}
+	if got, err := c.Get("retries"); err != nil || got != "5" {
+		t.Fatalf("get retries = %q,%v", got, err)
+	}
+	if len(Keys()) == 0 {
+		t.Fatal("Keys() empty")
+	}
+}
