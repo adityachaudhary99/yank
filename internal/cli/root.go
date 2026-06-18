@@ -141,6 +141,17 @@ func groupedUsage(c *cobra.Command) error {
 		}
 		fmt.Fprintln(w)
 	}
+	fmt.Fprintln(w, "Examples:")
+	for _, ex := range [][2]string{
+		{"yank https://example.com/app.tar.gz", "download a file (resumes if interrupted)"},
+		{"yank URL -o app.tgz", "save under a specific name"},
+		{"yank URL --checksums https://example.com/SHA256SUMS", "verify against a published checksums file"},
+		{"yank -i urls.txt", "download every URL in a file"},
+		{"cat urls.txt | yank -i -", "...or piped from stdin"},
+		{"yank URL -o - | tar xz", "stream straight into a pipe"},
+	} {
+		fmt.Fprintf(w, "  %-50s %s\n", ex[0], ex[1])
+	}
 	return nil
 }
 
