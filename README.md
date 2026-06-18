@@ -75,7 +75,7 @@ yank [flags] <url>...
   -q, --quiet              suppress progress output
       --checksum <a:hex>   verify download, e.g. sha256:abc...
       --sha256 <hex>       shorthand for --checksum sha256:<hex>
-      --checksums <src>    verify against a checksums file (path or http(s) URL)
+      --checksums <src>    verify against a checksums file (path, URL, or "auto")
       --backend <name>     force a backend: auto|native|curl|rclone|git|yt-dlp|aria2c|gdown
       --dry-run            show classification + command, download nothing
   -H, --header <K: V>      add a request header (repeatable)
@@ -152,6 +152,14 @@ retries = 8
 dir = "~/Downloads"
 ```
 
+Manage it from the CLI with `yank config`:
+
+```sh
+yank config                      # list all settings
+yank config get connections      # print one
+yank config set connections 16   # change one (saved to config.toml)
+```
+
 Precedence: **command-line flags > `YANK_*` env vars > config file > built-in defaults.**
 
 Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = "~/Downloads"`).
@@ -180,8 +188,9 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
   `sha256sum`-style checksums file.
 - **v0.4.2 (shipped)** — `--cookies <file>` (Netscape jar) and `--netrc` auth,
   on the native engine and curl / yt-dlp / aria2c.
-- **v0.4.x (next)** — mirrors, a sibling-`.sha256` auto-probe, a `yank config`
-  subcommand, and parallel multi-URL downloads.
+- **v0.4.3 (shipped)** — a `yank config` subcommand and `--checksums auto`
+  (sibling `.sha256`/`.md5` probe).
+- **v0.4.x (next)** — mirrors and parallel multi-URL downloads.
 
 ## License
 
