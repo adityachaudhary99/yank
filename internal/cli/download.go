@@ -34,6 +34,8 @@ type downloadFlags struct {
 	connections  int
 	retries      int
 	force        bool
+	fresh        bool
+	noResume     bool
 	quiet        bool
 	checksum     string
 	checksumsSrc string
@@ -429,6 +431,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	_, err = engine.Download(ctx, engine.Options{
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
 		Connections: conns, Retries: f.retries, Force: f.force,
+		Fresh:   f.fresh || f.noResume,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
 		StallTimeout: f.timeout, RateLimit: rate,
 	})

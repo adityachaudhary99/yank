@@ -167,3 +167,42 @@ func TestResumeRestartsOnModeSwitch(t *testing.T) {
 		t.Fatalf("content mismatch: got %d want %d", len(got), len(body))
 	}
 }
+
+// TestFreshIgnoresPart: with Fresh, a compatible .part + state must be ignored
+// and the transfer restarted from byte 0 (no Range request). --force stays
+// orthogonal (it overwrites a completed file but does not disable resume).
+func TestFreshIgnoresPart(t *testing.T) {
+	body := []byte("0123456789abcdefghij")
+	servedRangeFrom := int64(-1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		if r.Method == http.MethodHead {
+			return
+		}
+		if rng := r.Header.Get("Range"); rng != "" {
+			var start int64
+			fmt.Sscanf(rng, "bytes=%d-", &start)
+			servedRangeFrom = start
+		}
+		w.Write(body)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	out := filepath.Join(dir, "f.bin")
+	os.WriteFile(out+".part", body[:8], 0o644)
+	(&State{URL: srv.URL, Validator: `"v1"`, Total: int64(len(body))}).Save(out)
+	if _, err := Download(context.Background(), Options{
+		URL: srv.URL, OutputPath: out, Connections: 1, Retries: 1, Fresh: true,
+		Client: srv.Client(), Sink: progress.NewSilent(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); string(got) != string(body) {
+		t.Fatalf("content=%q", got)
+	}
+	if servedRangeFrom != -1 {
+		t.Fatalf("--fresh should restart, not resume; server got Range from %d", servedRangeFrom)
+	}
+}

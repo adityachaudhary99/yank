@@ -46,7 +46,9 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVarP(&f.dir, "dir", "d", cfg.Dir, "output directory")
 	pf.IntVarP(&f.connections, "connections", "x", cfg.Connections, "parallel connections")
 	pf.IntVarP(&f.retries, "retries", "r", cfg.Retries, "retry attempts")
-	pf.BoolVarP(&f.force, "force", "f", false, "overwrite existing files")
+	pf.BoolVarP(&f.force, "force", "f", false, "overwrite an existing completed file")
+	pf.BoolVar(&f.fresh, "fresh", false, "ignore any partial download and start over")
+	pf.BoolVar(&f.noResume, "no-resume", false, "alias for --fresh")
 	pf.BoolVarP(&f.quiet, "quiet", "q", false, "suppress progress output")
 	pf.StringVar(&f.checksum, "checksum", "", "verify download: algo:hex")
 	pf.StringVar(&f.checksumsSrc, "checksums", "", "verify against a checksums file (path or http(s) URL)")
@@ -64,6 +66,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVar(&f.cookiesFile, "cookies", "", "Netscape cookie jar file to send with requests")
 	pf.BoolVar(&f.netrc, "netrc", false, "use ~/.netrc (or $NETRC) for host credentials")
 	pf.StringArrayVar(&f.mirrors, "mirror", nil, "alternate URL for the same file; tried if the primary fails (repeatable)")
+	_ = pf.MarkHidden("no-resume")
 	f.color = cfg.Color
 
 	// Presentation + install flags are persistent so subcommands (doctor,

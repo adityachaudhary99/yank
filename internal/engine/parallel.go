@@ -23,11 +23,13 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 	part := out + ".part"
 	chunks := planChunks(meta.Size, opt.Connections)
 
-	// Resume: reuse a compatible .part + state with the same chunk plan.
+	// Resume: reuse a compatible .part + state with the same chunk plan (unless --fresh).
 	prog := make([]int64, len(chunks))
-	if st, _ := LoadState(out); st.compatibleForParallel(meta, opt.Connections) && len(st.Progress) == len(chunks) {
-		if fi, serr := os.Stat(part); serr == nil && fi.Size() == meta.Size {
-			copy(prog, st.Progress)
+	if !opt.Fresh {
+		if st, _ := LoadState(out); st.compatibleForParallel(meta, opt.Connections) && len(st.Progress) == len(chunks) {
+			if fi, serr := os.Stat(part); serr == nil && fi.Size() == meta.Size {
+				copy(prog, st.Progress)
+			}
 		}
 	}
 

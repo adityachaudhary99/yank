@@ -28,6 +28,7 @@ type Options struct {
 
 	StallTimeout time.Duration // abort an attempt if no bytes arrive within this; 0 = off
 	RateLimit    int64         // max bytes/sec across the whole transfer; 0 = unlimited
+	Fresh        bool          // ignore any partial .part/state and restart from 0
 }
 
 // Result reports what was downloaded.
@@ -61,7 +62,7 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	}
 	if !opt.Force {
 		if _, err := os.Stat(out); err == nil {
-			return nil, fmt.Errorf("%s already exists (use --force to overwrite)", out)
+			return nil, fmt.Errorf("%s already exists — use --force to overwrite (interrupted downloads resume automatically)", out)
 		}
 	}
 
@@ -99,11 +100,13 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		lim = newThrottle(opt.RateLimit, time.Now)
 	}
 
-	// Decide whether we can resume from an existing partial.
+	// Decide whether we can resume from an existing partial (unless --fresh).
 	var offset int64
-	if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
-		if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
-			offset = fi.Size()
+	if !opt.Fresh {
+		if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
+			if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
+				offset = fi.Size()
+			}
 		}
 	}
 
