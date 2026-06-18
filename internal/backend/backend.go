@@ -16,6 +16,8 @@ type Request struct {
 	Output      string
 	Insecure    bool     // skip TLS verification (maps to each tool's flag)
 	RateLimit   string   // download rate cap (e.g. "1M"), passed to each tool's flag
+	Cookies     string   // Netscape cookie jar file path
+	Netrc       bool     // use ~/.netrc for credentials
 	Passthrough []string // user args after "--"
 }
 
