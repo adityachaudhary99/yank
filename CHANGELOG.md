@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-18
+
+Ergonomics ("Smooth") — make the simple thing simple.
+
+### Added
+- **`--fresh`** (alias `--no-resume`) — discard any partial download and start
+  over. Resume remains the default; this is the explicit opt-out.
+- A **"resuming from N%"** notice when a transfer picks up from a partial (native
+  engine), plus a `{"event":"resume",...}` line in `--json`.
+- `--help` now groups flags into **Common** / **Advanced** / **Global**, so the
+  everyday path reads as one word: `yank <url>`.
+
+### Changed
+- **Resume is now advertised as automatic** (it always was): re-running the same
+  `yank <url>` continues an interrupted download — no `-o` or `-c` needed.
+- `--force` is clarified to "overwrite an existing *completed* file" and is
+  **orthogonal** to resume (`--fresh` handles partials). The "already exists"
+  message now points at `--force` and notes that interrupted downloads resume.
+
 ## [0.4.4] - 2026-06-18
 
 ### Added

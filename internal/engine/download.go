@@ -28,6 +28,7 @@ type Options struct {
 
 	StallTimeout time.Duration // abort an attempt if no bytes arrive within this; 0 = off
 	RateLimit    int64         // max bytes/sec across the whole transfer; 0 = unlimited
+	Fresh        bool          // ignore any partial .part/state and restart from 0
 }
 
 // Result reports what was downloaded.
@@ -37,6 +38,21 @@ type Result struct {
 }
 
 const minParallelSize = 1 << 20 // 1 MiB
+
+// resumeNotifier is an optional progress.Sink capability: when a sink implements
+// it, the engine reports the byte offset a transfer is resuming from.
+type resumeNotifier interface{ Resuming(done, total int64) }
+
+// notifyResume calls the sink's optional Resuming hook when a transfer is picking
+// up from a partial (done > 0).
+func notifyResume(s progress.Sink, done, total int64) {
+	if done <= 0 {
+		return
+	}
+	if r, ok := s.(resumeNotifier); ok {
+		r.Resuming(done, total)
+	}
+}
 
 // Download fetches Options.URL to disk, choosing single vs parallel transfer.
 func Download(ctx context.Context, opt Options) (*Result, error) {
@@ -61,7 +77,7 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	}
 	if !opt.Force {
 		if _, err := os.Stat(out); err == nil {
-			return nil, fmt.Errorf("%s already exists (use --force to overwrite)", out)
+			return nil, fmt.Errorf("%s already exists — use --force to overwrite (interrupted downloads resume automatically)", out)
 		}
 	}
 
@@ -99,13 +115,16 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		lim = newThrottle(opt.RateLimit, time.Now)
 	}
 
-	// Decide whether we can resume from an existing partial.
+	// Decide whether we can resume from an existing partial (unless --fresh).
 	var offset int64
-	if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
-		if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
-			offset = fi.Size()
+	if !opt.Fresh {
+		if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
+			if fi, serr := os.Stat(part); serr == nil && fi.Size() <= meta.Size {
+				offset = fi.Size()
+			}
 		}
 	}
+	notifyResume(opt.Sink, offset, meta.Size)
 
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {

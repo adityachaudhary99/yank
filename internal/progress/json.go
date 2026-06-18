@@ -26,6 +26,9 @@ func (j *JSON) emit(v map[string]any) {
 func (j *JSON) Update(downloaded, total int64) {
 	j.emit(map[string]any{"event": "progress", "name": j.name, "downloaded": downloaded, "total": total})
 }
+func (j *JSON) Resuming(downloaded, total int64) {
+	j.emit(map[string]any{"event": "resume", "name": j.name, "downloaded": downloaded, "total": total})
+}
 func (j *JSON) Finish(path string) {
 	j.emit(map[string]any{"event": "done", "name": j.name, "path": path})
 }

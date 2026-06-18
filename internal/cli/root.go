@@ -9,6 +9,7 @@ import (
 
 	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type BuildInfo struct {
@@ -24,9 +25,10 @@ func NewRootCmd(b BuildInfo) *cobra.Command {
 func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	cfg, _ := config.Load() // defaults if missing
 	root := &cobra.Command{
-		Use:           "yank [flags] <url>...",
-		Short:         "One universal download command",
-		Long:          "yank downloads from anywhere: HTTP(S) files, cloud storage, git repos, media sites, and torrents.",
+		Use:   "yank [flags] <url>...",
+		Short: "One universal download command",
+		Long: "yank downloads from anywhere: HTTP(S) files, cloud storage, git repos, media sites, and torrents.\n\n" +
+			"Interrupted downloads resume automatically — just run the same command again. Use --fresh to start over.",
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -46,7 +48,9 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVarP(&f.dir, "dir", "d", cfg.Dir, "output directory")
 	pf.IntVarP(&f.connections, "connections", "x", cfg.Connections, "parallel connections")
 	pf.IntVarP(&f.retries, "retries", "r", cfg.Retries, "retry attempts")
-	pf.BoolVarP(&f.force, "force", "f", false, "overwrite existing files")
+	pf.BoolVarP(&f.force, "force", "f", false, "overwrite an existing completed file")
+	pf.BoolVar(&f.fresh, "fresh", false, "ignore any partial download and start over")
+	pf.BoolVar(&f.noResume, "no-resume", false, "alias for --fresh")
 	pf.BoolVarP(&f.quiet, "quiet", "q", false, "suppress progress output")
 	pf.StringVar(&f.checksum, "checksum", "", "verify download: algo:hex")
 	pf.StringVar(&f.checksumsSrc, "checksums", "", "verify against a checksums file (path or http(s) URL)")
@@ -64,6 +68,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVar(&f.cookiesFile, "cookies", "", "Netscape cookie jar file to send with requests")
 	pf.BoolVar(&f.netrc, "netrc", false, "use ~/.netrc (or $NETRC) for host credentials")
 	pf.StringArrayVar(&f.mirrors, "mirror", nil, "alternate URL for the same file; tried if the primary fails (repeatable)")
+	_ = pf.MarkHidden("no-resume")
 	f.color = cfg.Color
 
 	// Presentation + install flags are persistent so subcommands (doctor,
@@ -75,9 +80,67 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	gf.BoolVar(&f.printDeps, "print", false, "only print install commands; never run them")
 	gf.StringVar(&f.pm, "pm", "", "package manager to use (apt|dnf|pacman|zypper|apk|brew)")
 
+	// Group the download flags so --help reads simple: a short Common set up top,
+	// everything else under Advanced (persistent flags become Global).
+	commonFlags := map[string]bool{
+		"output": true, "dir": true, "connections": true, "checksum": true,
+		"quiet": true, "fresh": true, "force": true, "dry-run": true, "json": true,
+	}
+	pf.VisitAll(func(fl *pflag.Flag) {
+		grp := "advanced"
+		if commonFlags[fl.Name] {
+			grp = "common"
+		}
+		_ = pf.SetAnnotation(fl.Name, "yankgroup", []string{grp})
+	})
+	gf.VisitAll(func(fl *pflag.Flag) { _ = gf.SetAnnotation(fl.Name, "yankgroup", []string{"global"}) })
+	root.SetUsageFunc(groupedUsage)
+
 	root.AddCommand(newVersionCmd(b), newDoctorCmd(f), newInstallDepsCmd(f), newThemeCmd(), newConfigCmd())
 	root.AddCommand(newCompletionCmd(root), newGenManCmd(root))
 	return root
+}
+
+// groupedUsage renders the root command's flags in Common / Advanced / Global
+// buckets (by the "yankgroup" annotation) for progressive-disclosure help.
+func groupedUsage(c *cobra.Command) error {
+	w := c.OutOrStderr()
+	fmt.Fprintf(w, "Usage:\n  %s\n\n", c.UseLine())
+	common := pflag.NewFlagSet("common", pflag.ContinueOnError)
+	advanced := pflag.NewFlagSet("advanced", pflag.ContinueOnError)
+	global := pflag.NewFlagSet("global", pflag.ContinueOnError)
+	c.Flags().VisitAll(func(fl *pflag.Flag) {
+		if fl.Hidden || fl.Name == "help" {
+			return
+		}
+		grp := "advanced"
+		if a := fl.Annotations["yankgroup"]; len(a) > 0 {
+			grp = a[0]
+		}
+		switch grp {
+		case "common":
+			common.AddFlag(fl)
+		case "global":
+			global.AddFlag(fl)
+		default:
+			advanced.AddFlag(fl)
+		}
+	})
+	fmt.Fprintf(w, "Common flags:\n%s\n", common.FlagUsages())
+	fmt.Fprintf(w, "Advanced flags:\n%s\n", advanced.FlagUsages())
+	if global.HasFlags() {
+		fmt.Fprintf(w, "Global flags:\n%s\n", global.FlagUsages())
+	}
+	if c.HasAvailableSubCommands() {
+		fmt.Fprintln(w, "Commands:")
+		for _, sc := range c.Commands() {
+			if sc.IsAvailableCommand() {
+				fmt.Fprintf(w, "  %-13s %s\n", sc.Name(), sc.Short)
+			}
+		}
+		fmt.Fprintln(w)
+	}
+	return nil
 }
 
 func Execute(b BuildInfo) int {
