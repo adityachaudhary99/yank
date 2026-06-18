@@ -121,3 +121,16 @@ func TestBackendInsecure(t *testing.T) {
 		t.Errorf("curl should not be insecure by default: %q", got)
 	}
 }
+
+func TestGdownBackend(t *testing.T) {
+	src := classify.Classify("https://drive.google.com/file/d/ABC/view")
+	argv, _ := Gdown{}.Build(Request{Source: src, Output: "out.bin", OutputDir: "/tmp"})
+	got := strings.Join(argv, " ")
+	if !strings.HasPrefix(got, "gdown --fuzzy") || !strings.Contains(got, "-O "+filepath.Join("/tmp", "out.bin")) {
+		t.Fatalf("gdown argv = %q", got)
+	}
+	argv2, _ := Gdown{}.Build(Request{Source: src})
+	if got := strings.Join(argv2, " "); strings.Contains(got, "-O") {
+		t.Errorf("gdown without -o should not pass -O: %q", got)
+	}
+}

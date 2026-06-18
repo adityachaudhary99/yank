@@ -96,5 +96,6 @@ func DefaultRegistry() *Registry {
 	r.Register(Aria2c{})
 	r.Register(Curl{})
 	r.Register(Rclone{})
+	r.Register(Gdown{})
 	return r
 }

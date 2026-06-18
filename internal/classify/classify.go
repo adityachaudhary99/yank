@@ -44,7 +44,8 @@ type Source struct {
 }
 
 var mediaHosts = []string{"youtube.com", "youtu.be", "vimeo.com", "twitter.com", "x.com", "tiktok.com", "twitch.tv", "soundcloud.com"}
-var cloudHosts = []string{"drive.google.com", "docs.google.com", "dropbox.com", "onedrive.live.com", "sharepoint.com", "storage.googleapis.com"}
+var driveHosts = []string{"drive.google.com", "docs.google.com"}
+var cloudHosts = []string{"dropbox.com", "onedrive.live.com", "sharepoint.com", "storage.googleapis.com"}
 var repoHosts = []string{"github.com", "gitlab.com", "bitbucket.org"}
 
 // Classify maps a raw URL to a Source. First matching rule wins (spec §3).
@@ -71,6 +72,11 @@ func Classify(raw string) Source {
 	}
 	if hostMatches(host, mediaHosts) {
 		return Source{raw, TypeMedia, "yt-dlp"}
+	}
+	// Google Drive/Docs share links go to gdown, which clears Drive's
+	// confirmation interstitial (rclone copyurl only fetches the HTML).
+	if hostMatches(host, driveHosts) {
+		return Source{raw, TypeCloud, "gdown"}
 	}
 	if hostMatches(host, cloudHosts) || strings.Contains(host, ".s3.") || strings.HasSuffix(host, ".amazonaws.com") {
 		return Source{raw, TypeCloud, "rclone"}
