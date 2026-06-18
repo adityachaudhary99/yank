@@ -10,6 +10,9 @@ func (Ytdlp) Build(req Request) ([]string, error) {
 	if req.Insecure {
 		argv = append(argv, "--no-check-certificates")
 	}
+	if req.RateLimit != "" {
+		argv = append(argv, "--limit-rate", req.RateLimit)
+	}
 	if req.Output != "" {
 		argv = append(argv, "-o", req.Output)
 	}

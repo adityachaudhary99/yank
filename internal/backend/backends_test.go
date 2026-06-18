@@ -134,3 +134,23 @@ func TestGdownBackend(t *testing.T) {
 		t.Errorf("gdown without -o should not pass -O: %q", got)
 	}
 }
+
+func TestBackendRateLimit(t *testing.T) {
+	src := classify.Classify("https://h/f.bin")
+	out := func(b Backend) string {
+		argv, _ := b.Build(Request{Source: src, RateLimit: "1M"})
+		return strings.Join(argv, " ")
+	}
+	if got := out(Curl{}); !strings.Contains(got, "--limit-rate 1M") {
+		t.Errorf("curl rate: %q", got)
+	}
+	if got := out(Aria2c{}); !strings.Contains(got, "--max-overall-download-limit=1M") {
+		t.Errorf("aria2c rate: %q", got)
+	}
+	if got := out(Ytdlp{}); !strings.Contains(got, "--limit-rate 1M") {
+		t.Errorf("yt-dlp rate: %q", got)
+	}
+	if got := out(Rclone{}); !strings.Contains(got, "--bwlimit 1M") {
+		t.Errorf("rclone rate: %q", got)
+	}
+}

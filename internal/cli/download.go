@@ -42,6 +42,7 @@ type downloadFlags struct {
 	noParallel  bool
 	timeout     time.Duration
 	insecure    bool
+	limitRate   string
 	theme       string
 	ascii       bool
 	color       bool
@@ -183,7 +184,7 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		reg:      reg,
 	}
 	return runDispatch(ctx, deps, src, route.Request{
-		OutputDir: f.dir, Output: f.output, Insecure: f.insecure, Passthrough: passthrough,
+		OutputDir: f.dir, Output: f.output, Insecure: f.insecure, RateLimit: f.limitRate, Passthrough: passthrough,
 	}, spec, f.output, f.dir)
 }
 
@@ -239,6 +240,10 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if err != nil {
 		return err
 	}
+	rate, rerr := engine.ParseRate(f.limitRate)
+	if rerr != nil {
+		return withCode(ExitUsage, rerr)
+	}
 	client := newHTTPClient(f, hdr)
 	conns := f.connections
 	if f.noParallel {
@@ -248,7 +253,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
 		Connections: conns, Retries: f.retries, Force: f.force,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
-		StallTimeout: f.timeout,
+		StallTimeout: f.timeout, RateLimit: rate,
 	})
 	return err
 }
@@ -307,7 +312,7 @@ func printPlan(cmd *cobra.Command, f *downloadFlags, src classify.Source, passth
 		if b, ok := backend.DefaultRegistry().Get(src.Backend); ok {
 			// Build with the same -o/-d the real run uses, so the previewed
 			// command matches what dispatch would actually execute.
-			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Insecure: f.insecure, Passthrough: passthrough}
+			req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Insecure: f.insecure, RateLimit: f.limitRate, Passthrough: passthrough}
 			if argv, err := b.Build(req); err == nil {
 				cmd.Printf("command: %v\n", argv)
 			}

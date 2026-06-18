@@ -10,6 +10,9 @@ func (Aria2c) Build(req Request) ([]string, error) {
 	if req.Insecure {
 		argv = append(argv, "--check-certificate=false")
 	}
+	if req.RateLimit != "" {
+		argv = append(argv, "--max-overall-download-limit="+req.RateLimit)
+	}
 	if req.Output != "" {
 		argv = append(argv, "--out="+req.Output)
 	}

@@ -16,6 +16,9 @@ func (Rclone) Build(req Request) ([]string, error) {
 	if req.Insecure {
 		argv = append(argv, "--no-check-certificate")
 	}
+	if req.RateLimit != "" {
+		argv = append(argv, "--bwlimit", req.RateLimit)
+	}
 	argv = append(argv, req.Passthrough...)
 	return argv, nil
 }
