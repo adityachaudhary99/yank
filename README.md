@@ -67,7 +67,8 @@ Not sure what `yank` will do? Add `--dry-run` to see the plan without downloadin
 yank [flags] <url>...
 
 # common flags
-  -o, --output <path>      output file path
+  -o, --output <path>      output file path (- for stdout)
+  -i, --input <file>       read URLs from a file, one per line (- for stdin)
   -d, --dir <dir>          output directory (default ".")
   -x, --connections <n>    parallel connections (default 8)
   -r, --retries <n>        retry attempts (default 5)
@@ -118,6 +119,13 @@ yank https://api.example.com/artifact -H 'Accept: application/octet-stream' --be
 
 # download several files; exit code 7 if some (but not all) fail
 yank https://a/x.bin https://b/y.bin -d ./downloads
+
+# download every URL in a file (one per line; # comments ok), or pipe from stdin
+yank -i urls.txt -d ./downloads
+grep -o 'https://[^"]*' page.html | yank -i -
+
+# stream straight into a pipe (no temp file)
+yank https://example.com/archive.tar.gz -o - | tar xz
 
 # one file with fallback mirrors — tried in order until one works
 yank https://main.example/app.tar.gz --mirror https://mirror1/app.tar.gz --mirror https://mirror2/app.tar.gz

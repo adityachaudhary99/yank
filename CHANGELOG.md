@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-18
+
+Composability ("Flow") — play nicely with files, pipes, and other tools.
+
+### Added
+- **`-i, --input <file>`** — read URLs from a file (one per line; blank lines and
+  `#` comments skipped). Use `-` to read from stdin (`cat urls.txt | yank -i -`).
+- **`-o -`** — stream the download to stdout for pipelines
+  (`yank URL -o - | tar xz`). Native HTTP(S), single URL; no resume/checksum.
+- **Examples in `--help`** — the common recipes now appear at the bottom of help.
+
 ## [0.5.0] - 2026-06-18
 
 Ergonomics ("Smooth") — make the simple thing simple.
@@ -221,6 +232,8 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.6.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.0
+[0.5.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.5.0
 [0.4.4]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.4
 [0.4.3]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.3
 [0.4.2]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.2
