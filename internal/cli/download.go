@@ -32,7 +32,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type downloadFlags struct {
+// transferFlags control a single download: destination, how it's fetched, auth,
+// verification, and connection/rate tuning.
+type transferFlags struct {
 	output       string
 	input        string
 	dir          string
@@ -58,13 +60,31 @@ type downloadFlags struct {
 	cookiesFile  string
 	netrc        bool
 	mirrors      []string
-	theme        string
-	ascii        bool
-	colorMode    string // --color: auto|always|never
-	verbose      bool   // -v: print routing/probe decisions
-	yes          bool
-	printDeps    bool
-	pm           string
+}
+
+// presentFlags control how output looks and how much is explained.
+type presentFlags struct {
+	theme     string
+	ascii     bool
+	colorMode string // --color: auto|always|never
+	verbose   bool   // -v: print routing/probe decisions
+}
+
+// installFlags control backend auto-install, shared with the doctor and
+// install-deps subcommands (hence persistent).
+type installFlags struct {
+	yes       bool
+	printDeps bool
+	pm        string
+}
+
+// downloadFlags is the full flag set, partitioned by concern. The groups are
+// embedded so existing f.output / f.theme / f.yes access keeps working via Go
+// field promotion (no call-site churn outside composite literals).
+type downloadFlags struct {
+	transferFlags
+	presentFlags
+	installFlags
 }
 
 func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
@@ -75,7 +95,7 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	if f.input != "" { // read more URLs from a file or stdin (one per line)
 		extra, err := inputURLs(cmd, f.input)
 		if err != nil {
-			return withCode(ExitUsage, err)
+			return usageErr(err)
 		}
 		urls = append(urls, extra...)
 	}
@@ -83,15 +103,15 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 		return cmd.Help()
 	}
 	if len(urls) > 1 && f.output != "" && f.output != "-" {
-		return withCode(ExitUsage, fmt.Errorf("-o sets one filename; use -d <dir> for multiple URLs"))
+		return usageErrf("-o sets one filename; use -d <dir> for multiple URLs")
 	}
 	if f.output == "-" && len(urls) > 1 {
-		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only valid with a single URL"))
+		return usageErrf("-o - (stdout) is only valid with a single URL")
 	}
 	ctx := cmd.Context()
 	if len(f.mirrors) > 0 {
 		if len(urls) != 1 {
-			return withCode(ExitUsage, fmt.Errorf("--mirror is only valid with a single URL"))
+			return usageErrf("--mirror is only valid with a single URL")
 		}
 		return downloadWithMirrors(ctx, cmd, f, urls[0], passthrough)
 	}
@@ -141,7 +161,7 @@ func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw 
 		printVerbose(cmd, f, src, passthrough)
 	}
 	if f.output == "-" && src.Backend != "native" {
-		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only supported for direct HTTP(S) downloads, not %s", src.Backend))
+		return usageErrf("-o - (stdout) is only supported for direct HTTP(S) downloads, not %s", src.Backend)
 	}
 	if src.Backend == "native" {
 		return nativeGet(ctx, cmd, f, raw, sink)
@@ -272,11 +292,11 @@ func effectiveChecksum(cmd *cobra.Command, f *downloadFlags, raw string) (string
 	}
 	data, err := loadChecksums(cmd, f, f.checksumsSrc)
 	if err != nil {
-		return "", withCode(ExitUsage, err)
+		return "", usageErr(err)
 	}
 	sums, err := checksum.ParseSums(bytes.NewReader(data))
 	if err != nil {
-		return "", withCode(ExitUsage, err)
+		return "", usageErr(err)
 	}
 	name := checksumTargetName(raw, f.output)
 	hex, ok := sums[name]
@@ -284,11 +304,11 @@ func effectiveChecksum(cmd *cobra.Command, f *downloadFlags, raw string) (string
 		hex, ok = sums[""] // a single bare-hash checksums file
 	}
 	if !ok {
-		return "", withCode(ExitUsage, fmt.Errorf("no checksum for %q in %s", name, f.checksumsSrc))
+		return "", usageErrf("no checksum for %q in %s", name, f.checksumsSrc)
 	}
 	algo, err := checksum.AlgoForHex(hex)
 	if err != nil {
-		return "", withCode(ExitUsage, err)
+		return "", usageErr(err)
 	}
 	return algo + ":" + hex, nil
 }
@@ -406,7 +426,7 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 	reg := backend.DefaultRegistry()
 	b, ok := reg.Get(src.Backend)
 	if !ok {
-		return withCode(ExitUnsupported, fmt.Errorf("no backend for source type %s", src.Type))
+		return fmt.Errorf("no backend for source type %s: %w", src.Type, ErrUnsupported)
 	}
 
 	// R9b: gate checksum before any install or transfer.
@@ -416,10 +436,10 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 	}
 	if spec != "" {
 		if !checksumCapableBackends[src.Backend] {
-			return withCode(ExitUsage, fmt.Errorf("checksum verification is not supported for %s", src.Backend))
+			return usageErrf("checksum verification is not supported for %s", src.Backend)
 		}
 		if f.output == "" {
-			return withCode(ExitUsage, fmt.Errorf("checksum verification for %s requires an explicit -o <file>", src.Backend))
+			return usageErrf("checksum verification for %s requires an explicit -o <file>", src.Backend)
 		}
 	}
 
@@ -435,11 +455,11 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 			In:    cmd.InOrStdin(),
 			Out:   cmd.OutOrStdout(),
 		}); ierr != nil {
-			return withCode(ExitMissingBackend, ierr)
+			return fmt.Errorf("%v: %w", ierr, ErrMissingBackend)
 		}
 		// Confirm the tool actually landed (e.g. --print prints but installs nothing).
 		if _, lookErr2 := install.LookPath(b.Tool()); lookErr2 != nil {
-			return withCode(ExitMissingBackend, fmt.Errorf("%s requires %q which is still not installed", src.Type, b.Tool()))
+			return fmt.Errorf("%s requires %q which is still not installed: %w", src.Type, b.Tool(), ErrMissingBackend)
 		}
 	}
 
@@ -474,7 +494,7 @@ type runDispatchDeps struct {
 func runDispatch(ctx context.Context, d runDispatchDeps, src classify.Source, req route.Request, spec, outputPath, outputDir string) error {
 	b, ok := d.reg.Get(src.Backend)
 	if !ok {
-		return withCode(ExitUnsupported, fmt.Errorf("no backend for source type %s", src.Type))
+		return fmt.Errorf("no backend for source type %s: %w", src.Type, ErrUnsupported)
 	}
 	d.reporter.Start(src.Backend, b.Tool(), src.Raw)
 	start := time.Now()
@@ -494,7 +514,7 @@ func runDispatch(ctx context.Context, d runDispatchDeps, src classify.Source, re
 		if verr := checksum.VerifySpec(outPath, spec); verr != nil {
 			if _, isFmt := verr.(*checksum.FormatError); isFmt {
 				d.reporter.Error(verr)
-				return withCode(ExitUsage, verr)
+				return usageErr(verr)
 			}
 			_ = os.Remove(outPath)
 			d.reporter.Error(verr)
@@ -529,15 +549,15 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	}
 	rate, rerr := engine.ParseRate(f.limitRate)
 	if rerr != nil {
-		return withCode(ExitUsage, rerr)
+		return usageErr(rerr)
 	}
 	client, err := newHTTPClient(f, hdr)
 	if err != nil {
-		return withCode(ExitUsage, err)
+		return usageErr(err)
 	}
 	if f.output == "-" { // stream to stdout (single stream, no resume/checksum)
 		if sum != "" {
-			return withCode(ExitUsage, fmt.Errorf("--checksum/--checksums is not supported with -o - (streaming to stdout)"))
+			return usageErrf("--checksum/--checksums is not supported with -o - (streaming to stdout)")
 		}
 		_, err = engine.Download(ctx, engine.Options{
 			URL: raw, Headers: hdr, Client: client, Sink: progress.NewSilent(),

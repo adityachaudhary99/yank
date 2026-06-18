@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-06-18
+
+Refine ("Refine") — internal hardening only; **no change to behavior, flags,
+output, or exit codes**. Two long-standing refactors from the v0.3.1 review.
+
+### Internal
+- Exit-code mapping now flows from typed sentinels (`ErrUnsupported`,
+  `ErrMissingBackend`) classified by `errors.Is`, with a single `usageErr`/
+  `usageErrf` home for the usage-error code — instead of a magic exit-code int
+  threaded through ~30 call sites. Same codes, less room to mis-tag one.
+- `downloadFlags` is partitioned by concern into embedded `transferFlags` /
+  `presentFlags` / `installFlags` groups (field access unchanged via promotion).
+
 ## [0.6.2] - 2026-06-18
 
 Polish ("Polish") — the last cut from the UX audit: standard color control,
@@ -259,6 +272,8 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.6.3]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.3
+[0.6.2]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.2
 [0.6.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.1
 [0.6.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.0
 [0.5.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.5.0

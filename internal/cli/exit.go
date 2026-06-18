@@ -3,10 +3,21 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/adityachaudhary99/yank/internal/checksum"
 	"github.com/adityachaudhary99/yank/internal/engine"
+)
+
+// Typed exit-code sentinels. Wrapping one of these (fmt.Errorf("ctx: %w", …))
+// lets ExitCodeFor classify the error by type instead of threading a magic int
+// through the call site. The sentinel message reads as the error category.
+var (
+	// ErrUnsupported marks a source no backend can handle → exit 6.
+	ErrUnsupported = errors.New("unsupported source type")
+	// ErrMissingBackend marks a required backend tool that isn't installed → exit 5.
+	ErrMissingBackend = errors.New("required backend not installed")
 )
 
 // Exit codes (spec §8).
@@ -38,6 +49,15 @@ func withCode(code int, err error) error {
 	return codedError{code: code, err: err}
 }
 
+// usageErr tags err as a usage error (exit 2) — the single home for the ExitUsage
+// code so the many argument/flag checks don't each repeat the magic int.
+func usageErr(err error) error { return withCode(ExitUsage, err) }
+
+// usageErrf is usageErr with a formatted message.
+func usageErrf(format string, a ...interface{}) error {
+	return withCode(ExitUsage, fmt.Errorf(format, a...))
+}
+
 // ExitCodeFor maps an error to a spec §8 exit code. An explicitly attached code
 // wins; otherwise the error is classified by type (interrupt, checksum, usage,
 // network), defaulting to ExitGeneric.
@@ -51,6 +71,12 @@ func ExitCodeFor(err error) int {
 	}
 	if errors.Is(err, context.Canceled) {
 		return ExitInterrupted
+	}
+	if errors.Is(err, ErrUnsupported) {
+		return ExitUnsupported
+	}
+	if errors.Is(err, ErrMissingBackend) {
+		return ExitMissingBackend
 	}
 	var mm *checksum.Mismatch
 	if errors.As(err, &mm) {

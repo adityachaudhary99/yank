@@ -23,16 +23,16 @@ func newConfigCmd() *cobra.Command {
 			switch args[0] {
 			case "get":
 				if len(args) != 2 {
-					return withCode(ExitUsage, fmt.Errorf("usage: yank config get <key>"))
+					return usageErrf("usage: yank config get <key>")
 				}
 				return configGet(cmd, args[1])
 			case "set":
 				if len(args) != 3 {
-					return withCode(ExitUsage, fmt.Errorf("usage: yank config set <key> <value>"))
+					return usageErrf("usage: yank config set <key> <value>")
 				}
 				return configSet(cmd, args[1], args[2])
 			default:
-				return withCode(ExitUsage, fmt.Errorf("unknown config command %q (use list|get|set)", args[0]))
+				return usageErrf("unknown config command %q (use list|get|set)", args[0])
 			}
 		},
 	}
@@ -51,7 +51,7 @@ func configGet(cmd *cobra.Command, key string) error {
 	c, _ := config.Load()
 	v, err := c.Get(key)
 	if err != nil {
-		return withCode(ExitUsage, err)
+		return usageErr(err)
 	}
 	cmd.Println(v)
 	return nil
@@ -63,7 +63,7 @@ func configSet(cmd *cobra.Command, key, value string) error {
 		return err
 	}
 	if err := c.Set(key, value); err != nil {
-		return withCode(ExitUsage, err)
+		return usageErr(err)
 	}
 	if err := config.Save(c); err != nil {
 		return fmt.Errorf("saving config: %w", err)

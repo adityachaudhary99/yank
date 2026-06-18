@@ -11,7 +11,7 @@ import (
 
 func TestSilentReporterWritesNothing(t *testing.T) {
 	var buf bytes.Buffer
-	r := newDispatchReporter(&buf, &downloadFlags{quiet: true}, "f.bin")
+	r := newDispatchReporter(&buf, &downloadFlags{transferFlags: transferFlags{quiet: true}}, "f.bin")
 	r.Start("curl", "curl", "u")
 	r.Finish("p", time.Second, "sha256 ok")
 	if buf.Len() != 0 {
@@ -21,7 +21,7 @@ func TestSilentReporterWritesNothing(t *testing.T) {
 
 func TestJSONReporterEvents(t *testing.T) {
 	var buf bytes.Buffer
-	r := newDispatchReporter(&buf, &downloadFlags{jsonOut: true}, "f.bin")
+	r := newDispatchReporter(&buf, &downloadFlags{transferFlags: transferFlags{jsonOut: true}}, "f.bin")
 	r.Start("rclone", "rclone", "https://x")
 	r.Finish("/tmp/f.bin", 1500*time.Millisecond, "sha256 ok")
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -45,7 +45,7 @@ func TestJSONReporterEvents(t *testing.T) {
 
 func TestThemedReporterChrome(t *testing.T) {
 	var buf bytes.Buffer
-	r := newDispatchReporter(&buf, &downloadFlags{theme: "catppuccin", ascii: true}, "f.bin")
+	r := newDispatchReporter(&buf, &downloadFlags{presentFlags: presentFlags{theme: "catppuccin", ascii: true}}, "f.bin")
 	r.Start("curl", "curl", "https://x/y")
 	r.Finish("/tmp/f.bin", time.Second, "")
 	s := buf.String()
@@ -61,10 +61,10 @@ func TestDispatchStreams(t *testing.T) {
 	if so, se := dispatchStreams(&downloadFlags{}); so == io.Discard || se == io.Discard {
 		t.Fatal("default should pass through")
 	}
-	if so, se := dispatchStreams(&downloadFlags{quiet: true}); so != io.Discard || se != io.Discard {
+	if so, se := dispatchStreams(&downloadFlags{transferFlags: transferFlags{quiet: true}}); so != io.Discard || se != io.Discard {
 		t.Fatal("quiet should discard")
 	}
-	if so, se := dispatchStreams(&downloadFlags{jsonOut: true}); so != io.Discard || se != io.Discard {
+	if so, se := dispatchStreams(&downloadFlags{transferFlags: transferFlags{jsonOut: true}}); so != io.Discard || se != io.Discard {
 		t.Fatal("json should discard")
 	}
 }

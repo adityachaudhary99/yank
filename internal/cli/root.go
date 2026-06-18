@@ -41,7 +41,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	}
 	// Flag-parse errors (e.g. unknown flag) are usage errors → exit code 2.
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return withCode(ExitUsage, err)
+		return usageErr(err)
 	})
 	pf := root.Flags()
 	pf.StringVarP(&f.output, "output", "o", "", "output file path (- for stdout)")
