@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -30,6 +31,7 @@ import (
 
 type downloadFlags struct {
 	output       string
+	input        string
 	dir          string
 	connections  int
 	retries      int
@@ -65,6 +67,13 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	f.dir = config.ExpandPath(f.dir)
 	f.output = config.ExpandPath(f.output)
 	urls, passthrough := splitPassthrough(cmd, args)
+	if f.input != "" { // read more URLs from a file or stdin (one per line)
+		extra, err := inputURLs(cmd, f.input)
+		if err != nil {
+			return withCode(ExitUsage, err)
+		}
+		urls = append(urls, extra...)
+	}
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
@@ -565,4 +574,31 @@ func splitPassthrough(cmd *cobra.Command, args []string) (urls, passthrough []st
 		return args[:i], args[i:]
 	}
 	return args, nil
+}
+
+// inputURLs reads URLs from --input: a local file, or "-" for stdin.
+func inputURLs(cmd *cobra.Command, src string) ([]string, error) {
+	if src == "-" {
+		return readInputURLs(cmd.InOrStdin()), nil
+	}
+	b, err := os.ReadFile(config.ExpandPath(src))
+	if err != nil {
+		return nil, err
+	}
+	return readInputURLs(bytes.NewReader(b)), nil
+}
+
+// readInputURLs parses one URL per line, trimming whitespace and skipping blank
+// lines and #-comments.
+func readInputURLs(r io.Reader) []string {
+	var urls []string
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		urls = append(urls, line)
+	}
+	return urls
 }

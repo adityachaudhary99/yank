@@ -33,7 +33,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
+			if len(args) == 0 && f.input == "" {
 				return cmd.Help()
 			}
 			return runDownload(cmd, f, args)
@@ -44,7 +44,8 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 		return withCode(ExitUsage, err)
 	})
 	pf := root.Flags()
-	pf.StringVarP(&f.output, "output", "o", "", "output file path")
+	pf.StringVarP(&f.output, "output", "o", "", "output file path (- for stdout)")
+	pf.StringVarP(&f.input, "input", "i", "", "read URLs from a file, one per line (- for stdin)")
 	pf.StringVarP(&f.dir, "dir", "d", cfg.Dir, "output directory")
 	pf.IntVarP(&f.connections, "connections", "x", cfg.Connections, "parallel connections")
 	pf.IntVarP(&f.retries, "retries", "r", cfg.Retries, "retry attempts")
@@ -83,7 +84,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	// Group the download flags so --help reads simple: a short Common set up top,
 	// everything else under Advanced (persistent flags become Global).
 	commonFlags := map[string]bool{
-		"output": true, "dir": true, "connections": true, "checksum": true,
+		"output": true, "input": true, "dir": true, "connections": true, "checksum": true,
 		"quiet": true, "fresh": true, "force": true, "dry-run": true, "json": true,
 	}
 	pf.VisitAll(func(fl *pflag.Flag) {
