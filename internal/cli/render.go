@@ -28,7 +28,7 @@ func newProgressSink(out io.Writer, f *downloadFlags, name, sum string) progress
 		Getenv:     os.Getenv,
 		IsTTY:      isTerminal(out),
 		Width:      terminalWidth(out),
-		ColorCfg:   f.color,
+		Color:      f.colorMode,
 		ForceASCII: f.ascii,
 	}
 	return ui.NewSink(out, theme, ui.Detect(env), name, sum)

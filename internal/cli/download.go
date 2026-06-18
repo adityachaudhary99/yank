@@ -60,7 +60,8 @@ type downloadFlags struct {
 	mirrors      []string
 	theme        string
 	ascii        bool
-	color        bool
+	colorMode    string // --color: auto|always|never
+	verbose      bool   // -v: print routing/probe decisions
 	yes          bool
 	printDeps    bool
 	pm           string
@@ -135,6 +136,9 @@ func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw 
 	if f.dryRun {
 		printPlan(cmd, f, src, passthrough)
 		return nil
+	}
+	if f.verbose {
+		printVerbose(cmd, f, src, passthrough)
 	}
 	if f.output == "-" && src.Backend != "native" {
 		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only supported for direct HTTP(S) downloads, not %s", src.Backend))
@@ -224,7 +228,7 @@ func concurrentSinks(cmd *cobra.Command, f *downloadFlags, urls []string) ([]pro
 		}
 		caps := ui.Detect(ui.Env{
 			Getenv: os.Getenv, IsTTY: isTerminal(cmd.OutOrStdout()),
-			Width: terminalWidth(cmd.OutOrStdout()), ColorCfg: f.color, ForceASCII: f.ascii,
+			Width: terminalWidth(cmd.OutOrStdout()), Color: f.colorMode, ForceASCII: f.ascii,
 		})
 		names := make([]string, len(urls))
 		for i, u := range urls {
@@ -673,6 +677,41 @@ func printPlan(cmd *cobra.Command, f *downloadFlags, src classify.Source, passth
 			if argv, err := b.Build(req); err == nil {
 				cmd.Printf("command: %v\n", argv)
 			}
+		}
+	}
+}
+
+// printVerbose explains the routing decision on stderr before the transfer runs:
+// the resolved backend + type, the output target, and (for a dispatched backend)
+// the exact argv. Same content as --dry-run, but the run still proceeds. Written
+// to stderr so it never corrupts -o - (stdout) or --json output.
+func printVerbose(cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) {
+	w := cmd.ErrOrStderr()
+	fmt.Fprintf(w, "yank: route   %s -> %s (%s)\n", src.Raw, src.Backend, src.Type)
+	if src.Backend == "native" {
+		conns := f.connections
+		if f.noParallel {
+			conns = 1
+		}
+		resume := "on"
+		if f.fresh || f.noResume {
+			resume = "off (--fresh)"
+		}
+		out := f.output
+		switch out {
+		case "":
+			out = displayName(src.Raw, "")
+		case "-":
+			out = "(stdout)"
+		}
+		fmt.Fprintf(w, "yank: output  %s\n", out)
+		fmt.Fprintf(w, "yank: engine  %d connection(s), %d retries, resume %s\n", conns, f.retries, resume)
+		return
+	}
+	if b, ok := backend.DefaultRegistry().Get(src.Backend); ok {
+		req := backend.Request{Source: src, Output: f.output, OutputDir: f.dir, Insecure: f.insecure, RateLimit: f.limitRate, Cookies: f.cookiesFile, Netrc: f.netrc, Passthrough: passthrough}
+		if argv, err := b.Build(req); err == nil {
+			fmt.Fprintf(w, "yank: command %v\n", argv)
 		}
 	}
 }

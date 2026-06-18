@@ -73,3 +73,22 @@ func ExitCodeFor(err error) int {
 	}
 	return ExitGeneric
 }
+
+// errorHint returns a short next-step suggestion for an error, or "" if none
+// applies (clig.dev: "suggest what to do when there's an error"). Missing-tool
+// and stale-yt-dlp hints are emitted at their source; these cover the cases that
+// only become actionable once the final error code is known.
+func errorHint(err error) string {
+	if err == nil {
+		return ""
+	}
+	var mm *checksum.Mismatch
+	if errors.As(err, &mm) {
+		return "the file may be corrupt or a stale partial — re-run with --fresh to download from scratch"
+	}
+	switch ExitCodeFor(err) {
+	case ExitUnsupported:
+		return "force a downloader with --backend (e.g. --backend curl|yt-dlp|aria2c)"
+	}
+	return ""
+}

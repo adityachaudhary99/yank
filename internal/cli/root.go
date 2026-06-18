@@ -70,8 +70,15 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVar(&f.cookiesFile, "cookies", "", "Netscape cookie jar file to send with requests")
 	pf.BoolVar(&f.netrc, "netrc", false, "use ~/.netrc (or $NETRC) for host credentials")
 	pf.StringArrayVar(&f.mirrors, "mirror", nil, "alternate URL for the same file; tried if the primary fails (repeatable)")
+	pf.BoolVarP(&f.verbose, "verbose", "v", false, "explain routing: backend chosen, probe result, dispatched command")
 	_ = pf.MarkHidden("no-resume")
-	f.color = cfg.Color
+	// --color is tri-state; its default honors the config "color" preference
+	// (true → auto, false → never). FORCE_COLOR/NO_COLOR still apply in auto.
+	defaultColor := "auto"
+	if !cfg.Color {
+		defaultColor = "never"
+	}
+	pf.StringVar(&f.colorMode, "color", defaultColor, "colorize output: auto|always|never")
 
 	// Presentation + install flags are persistent so subcommands (doctor,
 	// install-deps) and the download path share them.
@@ -164,6 +171,9 @@ func Execute(b BuildInfo) int {
 	err := NewRootCmd(b).ExecuteContext(ctx)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "yank:", err)
+		if hint := errorHint(err); hint != "" {
+			fmt.Fprintln(os.Stderr, "  hint:", hint)
+		}
 	}
 	return ExitCodeFor(err)
 }

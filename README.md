@@ -92,6 +92,8 @@ yank [flags] <url>...
       --limit-rate <rate>  cap the download rate, e.g. 500k or 1M
       --timeout <dur>      abort if a transfer stalls (no data) this long, e.g. 30s
       --insecure           skip TLS verification (native + dispatched backends)
+      --color <when>       colorize output: auto|always|never (honors NO_COLOR/FORCE_COLOR)
+  -v, --verbose            explain the routing decision (backend, target, argv) on stderr
 ```
 
 **Resume is automatic.** If a download is interrupted, just run the **same
@@ -213,7 +215,13 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
 - **v0.4.3 (shipped)** — a `yank config` subcommand and `--checksums auto`
   (sibling `.sha256`/`.md5` probe).
 - **v0.4.4 (shipped)** — `--mirror <url>` fallback URLs for a single download.
-- **v0.4.x (next)** — parallel multi-URL downloads.
+- **v0.5 (shipped)** — resume made obvious: resume-by-default + `--fresh`/`--no-resume`
+  opt-out, a "resuming from N%" notice, and grouped `--help`.
+- **v0.6.0 (shipped)** — composability: `-i/--input` (file or stdin), `-o -`
+  stdout streaming, and Examples in `--help`.
+- **v0.6.1 (shipped)** — `-j/--jobs` parallel multi-URL with aggregate progress.
+- **v0.6.2 (shipped)** — `--color auto|always|never` (+ `FORCE_COLOR`),
+  `-v/--verbose` routing trace, and error next-step hints.
 
 ## License
 
