@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-06-18
+
+### Fixed
+- **Matrix theme progress bar no longer floods the terminal.** Its live speed
+  sparkline could grow to 40 characters, pushing the line past the terminal
+  width; the wrapped line defeated the in-place `\r` + erase redraw, so each
+  update stacked a fresh copy down the screen. The sparkline is now budgeted to
+  the columns left after the rest of the line (and capped for a tidy readout), so
+  the bar redraws cleanly on one line.
+
 ## [0.6.3] - 2026-06-18
 
 Refine ("Refine") — internal hardening only; **no change to behavior, flags,

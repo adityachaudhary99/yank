@@ -82,17 +82,47 @@ func (s *sink) Update(done, total int64) {
 	}
 
 	pal := s.theme.Palette
+	bw := barWidth(s.caps.Width)
 	spin := paint(pal.Accent, g.Spinner[s.frame], s.caps)
-	bar := s.bar(done, total, barWidth(s.caps.Width))
-	pctStr := paint(pal.Accent, fmt.Sprintf("%d%%", pct(done, total)), s.caps)
+	bar := s.bar(done, total, bw)
+	pctPlain := fmt.Sprintf("%d%%", pct(done, total))
+	pctStr := paint(pal.Accent, pctPlain, s.caps)
 	speedStr := humanBytes(int64(speed)) + "/s"
+	etaPlain := etaStr(done, total, speed)
 
 	line := fmt.Sprintf("\r%s %s  [%s]  %s  %s", spin, s.name, bar, pctStr, speedStr)
 	if s.theme.Sparkline && s.caps.Unicode && len(s.speeds) > 1 {
-		line += "  " + paint(pal.Dim, sparkline(s.speeds), s.caps)
+		// Budget the sparkline to the columns left after everything else, so the
+		// live line never exceeds the terminal width. A wrapped line breaks the
+		// \r + erase-to-EOL redraw: erase only clears the cursor's row, so the
+		// wrapped remainder lingers and the bar floods stacked copies down screen.
+		if spk := fitSparkline(s.speeds, s.caps.Width, len(s.name), bw, len(pctPlain), len(speedStr), len(etaPlain)); len(spk) > 1 {
+			line += "  " + paint(pal.Dim, sparkline(spk), s.caps)
+		}
 	}
-	line += "  eta " + etaStr(done, total, speed)
+	line += "  eta " + etaPlain
 	fmt.Fprint(s.w, line+s.clear())
+}
+
+// fitSparkline returns the tail of speeds that fits in the columns left over
+// after the rest of the live line, capped to sparkMax for a tidy readout. An
+// empty/one-element result tells the caller to skip the sparkline entirely.
+func fitSparkline(speeds []float64, width, nameLen, barW, pctLen, speedLen, etaLen int) []float64 {
+	const sparkMax = 16
+	// Fixed chrome around the value (see the line format): spinner+spaces+brackets
+	// +"  eta "+spacing. Everything except the sparkline run.
+	used := 1 + 1 + nameLen + 3 + barW + 3 + pctLen + 2 + speedLen + 2 + 6 + etaLen
+	budget := width - used - 1
+	if budget > sparkMax {
+		budget = sparkMax
+	}
+	if budget < 0 {
+		budget = 0
+	}
+	if len(speeds) > budget {
+		return speeds[len(speeds)-budget:]
+	}
+	return speeds
 }
 
 // bar renders a themed, colored progress bar: filled run + optional head + track.
