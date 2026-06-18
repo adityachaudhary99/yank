@@ -39,6 +39,21 @@ type Result struct {
 
 const minParallelSize = 1 << 20 // 1 MiB
 
+// resumeNotifier is an optional progress.Sink capability: when a sink implements
+// it, the engine reports the byte offset a transfer is resuming from.
+type resumeNotifier interface{ Resuming(done, total int64) }
+
+// notifyResume calls the sink's optional Resuming hook when a transfer is picking
+// up from a partial (done > 0).
+func notifyResume(s progress.Sink, done, total int64) {
+	if done <= 0 {
+		return
+	}
+	if r, ok := s.(resumeNotifier); ok {
+		r.Resuming(done, total)
+	}
+}
+
 // Download fetches Options.URL to disk, choosing single vs parallel transfer.
 func Download(ctx context.Context, opt Options) (*Result, error) {
 	if opt.Client == nil {
@@ -109,6 +124,7 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 			}
 		}
 	}
+	notifyResume(opt.Sink, offset, meta.Size)
 
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {

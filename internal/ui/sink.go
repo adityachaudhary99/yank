@@ -141,6 +141,22 @@ func (s *sink) Error(err error) {
 	fmt.Fprintf(s.w, "%s%s %s  error: %v%s\n", s.cr(), fail, s.name, err, s.clear())
 }
 
+// Resuming prints a one-line notice before the live bar when a transfer picks up
+// from a partial download. TTY-only (the bar itself is silent on non-tty).
+func (s *sink) Resuming(done, total int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.caps.TTY {
+		return
+	}
+	arrow := "↻"
+	if !s.caps.Unicode {
+		arrow = "~"
+	}
+	line := fmt.Sprintf("%s resuming %s from %d%%", arrow, s.name, pct(done, total))
+	fmt.Fprintln(s.w, paint(s.theme.Palette.Dim, line, s.caps))
+}
+
 // cr returns a carriage return to overwrite the live line on a TTY, or "" for a
 // non-tty (where Update stays silent, so there is no line to overwrite).
 func (s *sink) cr() string {

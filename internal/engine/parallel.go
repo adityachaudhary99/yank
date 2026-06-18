@@ -56,6 +56,7 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		downloaded += prog[i]
 	}
 	if downloaded > 0 {
+		notifyResume(opt.Sink, downloaded, meta.Size)
 		opt.Sink.Update(downloaded, meta.Size) // show resumed position immediately
 	}
 
