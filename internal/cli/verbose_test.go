@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -47,6 +48,13 @@ func TestErrorHintUnsupported(t *testing.T) {
 	err := withCode(ExitUnsupported, errors.New("no backend for source type unknown"))
 	if h := errorHint(err); !strings.Contains(h, "--backend") {
 		t.Fatalf("unsupported hint = %q", h)
+	}
+}
+
+func TestErrorHintUnsupportedSentinel(t *testing.T) {
+	err := fmt.Errorf("no backend for %s: %w", "magnet", ErrUnsupported)
+	if h := errorHint(err); !strings.Contains(h, "--backend") {
+		t.Fatalf("wrapped-sentinel unsupported hint = %q", h)
 	}
 }
 

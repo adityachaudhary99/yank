@@ -21,8 +21,10 @@ func TestExitCodeForClassifies(t *testing.T) {
 	}{
 		{"nil", nil, ExitOK},
 		{"coded wins over type", withCode(ExitPartial, &checksum.Mismatch{}), ExitPartial},
-		{"missing backend", withCode(ExitMissingBackend, errors.New("x")), ExitMissingBackend},
-		{"unsupported", withCode(ExitUnsupported, errors.New("x")), ExitUnsupported},
+		{"missing backend (coded)", withCode(ExitMissingBackend, errors.New("x")), ExitMissingBackend},
+		{"unsupported (coded)", withCode(ExitUnsupported, errors.New("x")), ExitUnsupported},
+		{"unsupported (sentinel)", fmt.Errorf("no backend for %s: %w", "magnet", ErrUnsupported), ExitUnsupported},
+		{"missing backend (sentinel)", fmt.Errorf("install %s: %w", "yt-dlp", ErrMissingBackend), ExitMissingBackend},
 		{"checksum mismatch", &checksum.Mismatch{Want: "a", Got: "b"}, ExitChecksum},
 		{"checksum format", fmtErr, ExitUsage},
 		{"network (url.Error)", &url.Error{Op: "Get", URL: "http://x", Err: errors.New("refused")}, ExitNetwork},

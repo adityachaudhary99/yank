@@ -15,7 +15,7 @@ func TestEffectiveChecksumFromFile(t *testing.T) {
 	os.WriteFile(sums, []byte("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  hello.bin\n"), 0o644)
 
 	root := NewRootCmd(BuildInfo{Version: "test"})
-	f := &downloadFlags{output: "hello.bin", checksumsSrc: sums}
+	f := &downloadFlags{transferFlags: transferFlags{output: "hello.bin", checksumsSrc: sums}}
 	spec, err := effectiveChecksum(root, f, "https://x/hello.bin")
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestEffectiveChecksumFromURL(t *testing.T) {
 	}))
 	defer srv.Close()
 	root := NewRootCmd(BuildInfo{Version: "test"})
-	f := &downloadFlags{output: "hello.bin", checksumsSrc: srv.URL}
+	f := &downloadFlags{transferFlags: transferFlags{output: "hello.bin", checksumsSrc: srv.URL}}
 	spec, err := effectiveChecksum(root, f, "https://x/hello.bin")
 	if err != nil || spec == "" {
 		t.Fatalf("spec=%q err=%v", spec, err)
@@ -43,7 +43,7 @@ func TestEffectiveChecksumMissingEntry(t *testing.T) {
 	sums := filepath.Join(dir, "S")
 	os.WriteFile(sums, []byte("deadbeef  other.bin\n"), 0o644)
 	root := NewRootCmd(BuildInfo{Version: "test"})
-	f := &downloadFlags{output: "hello.bin", checksumsSrc: sums}
+	f := &downloadFlags{transferFlags: transferFlags{output: "hello.bin", checksumsSrc: sums}}
 	if _, err := effectiveChecksum(root, f, "https://x/hello.bin"); err == nil {
 		t.Fatal("want error for missing entry")
 	}
@@ -58,7 +58,7 @@ func TestEffectiveChecksumAuto(t *testing.T) {
 	defer srv.Close()
 
 	root := NewRootCmd(BuildInfo{Version: "test"})
-	f := &downloadFlags{output: "hello.bin", checksumsSrc: "auto"}
+	f := &downloadFlags{transferFlags: transferFlags{output: "hello.bin", checksumsSrc: "auto"}}
 	spec, err := effectiveChecksum(root, f, srv.URL+"/hello.bin")
 	if err != nil || spec != "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
 		t.Fatalf("auto spec=%q err=%v", spec, err)
@@ -72,7 +72,7 @@ func TestEffectiveChecksumAutoNoneFound(t *testing.T) {
 	defer srv.Close()
 	root := NewRootCmd(BuildInfo{Version: "test"})
 	root.SetErr(new(bytes.Buffer))
-	f := &downloadFlags{output: "x.bin", checksumsSrc: "auto"}
+	f := &downloadFlags{transferFlags: transferFlags{output: "x.bin", checksumsSrc: "auto"}}
 	spec, err := effectiveChecksum(root, f, srv.URL+"/x.bin")
 	if err != nil || spec != "" {
 		t.Fatalf("none-found should be empty+nil, got %q,%v", spec, err)
