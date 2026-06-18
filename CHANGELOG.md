@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-06-18
+
+### Added
+- **`--checksums <url|file>`** — verify a download against a `sha256sum`-style
+  checksums file (a local path or an `http(s)://` URL). yank matches the entry by
+  the output filename and infers the algorithm from the hash length
+  (md5/sha1/sha256/sha512). An explicit `--checksum`/`--sha256` still wins; for
+  dispatched backends the same single-file + `-o` rule as `--checksum` applies.
+
 ## [0.4.0] - 2026-06-18
 
 First cut of "Expand" — new coverage and new control.
@@ -162,6 +171,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.4.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.1
 [0.4.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.0
 [0.3.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.1
 [0.3.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.3.0
