@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/adityachaudhary99/yank/internal/backend"
 	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/adityachaudhary99/yank/internal/ui"
 	"github.com/spf13/cobra"
@@ -14,7 +15,7 @@ func newDoctorCmd(f *downloadFlags) *cobra.Command {
 		Use:   "doctor",
 		Short: "Report which backend tools are installed",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tools := []string{"git", "rclone", "yt-dlp", "aria2c", "curl"}
+			tools := backend.DefaultRegistry().Tools()
 			res := doctor.Check(tools, exec.LookPath)
 			out := cmd.OutOrStdout()
 

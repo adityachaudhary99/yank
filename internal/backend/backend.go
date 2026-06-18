@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"sort"
 
 	"github.com/adityachaudhary99/yank/internal/classify"
 )
@@ -70,6 +71,21 @@ func (r *Registry) Register(b Backend) { r.m[b.Name()] = b }
 func (r *Registry) Get(name string) (Backend, bool) {
 	b, ok := r.m[name]
 	return b, ok
+}
+
+// Tools returns the sorted, de-duplicated set of external tools across all
+// registered backends.
+func (r *Registry) Tools() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, b := range r.m {
+		if t := b.Tool(); t != "" && !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // DefaultRegistry returns a registry with all built-in backends registered.
