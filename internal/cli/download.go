@@ -132,6 +132,9 @@ func effectiveChecksum(cmd *cobra.Command, f *downloadFlags, raw string) (string
 	if spec, _ := checksumSpec(cmd, f); spec != "" {
 		return spec, nil
 	}
+	if f.checksumsSrc == "auto" {
+		return effectiveChecksumAuto(cmd, f, raw)
+	}
 	if f.checksumsSrc == "" {
 		return "", nil
 	}
@@ -156,6 +159,43 @@ func effectiveChecksum(cmd *cobra.Command, f *downloadFlags, raw string) (string
 		return "", withCode(ExitUsage, err)
 	}
 	return algo + ":" + hex, nil
+}
+
+// effectiveChecksumAuto opportunistically probes sibling checksum files of an
+// http(s) URL (<url>.sha256/.sha512/.sha1/.md5). The first that exists and lists
+// the target wins; if none is found it prints a notice and returns "" (auto is
+// best-effort, so the download proceeds unverified).
+func effectiveChecksumAuto(cmd *cobra.Command, f *downloadFlags, raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", nil
+	}
+	name := checksumTargetName(raw, f.output)
+	for _, ext := range []string{".sha256", ".sha512", ".sha1", ".md5"} {
+		su := *u
+		su.Path += ext
+		su.RawQuery = ""
+		data, derr := loadChecksums(cmd, f, su.String())
+		if derr != nil {
+			continue
+		}
+		sums, perr := checksum.ParseSums(bytes.NewReader(data))
+		if perr != nil {
+			continue
+		}
+		hex, ok := sums[name]
+		if !ok {
+			hex, ok = sums[""]
+		}
+		if !ok {
+			continue
+		}
+		if algo, aerr := checksum.AlgoForHex(hex); aerr == nil {
+			return algo + ":" + hex, nil
+		}
+	}
+	cmd.PrintErrln("yank: no sibling checksum found for " + name + "; downloading unverified")
+	return "", nil
 }
 
 // loadChecksums reads a checksums source: an http(s) URL is fetched with the
