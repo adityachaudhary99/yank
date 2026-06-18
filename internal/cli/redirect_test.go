@@ -19,7 +19,10 @@ func TestRedirectStripsInjectedHeaders(t *testing.T) {
 	defer src.Close()
 
 	injected := http.Header{"X-Secret": {"shh"}}
-	client := newHTTPClient(&downloadFlags{}, injected)
+	client, err := newHTTPClient(&downloadFlags{}, injected)
+	if err != nil {
+		t.Fatal(err)
+	}
 	req, _ := http.NewRequest(http.MethodGet, src.URL, nil)
 	req.Header.Set("X-Secret", "shh")
 	resp, err := client.Do(req)
