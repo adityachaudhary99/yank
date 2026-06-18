@@ -9,14 +9,15 @@ yank https://example.com/big.iso          # parallel HTTP download, resumable
 yank https://github.com/cli/cli           # git clone
 yank https://youtu.be/dQw4w9WgXcQ         # yt-dlp
 yank 'magnet:?xt=urn:btih:...'            # aria2c
-yank https://drive.google.com/file/d/ID   # rclone
+yank https://bucket.s3.amazonaws.com/f    # rclone (S3/GCS/Dropbox/OneDrive)
+yank https://drive.google.com/file/d/ID   # gdown
 ```
 
-![yank demo](docs/media/yank-demo.gif)
+![yank demo](docs/media/yank-v0.6.gif)
 
-*One command, every source: a native parallel download with resume + checksums, then automatic dispatch to git / yt-dlp / aria2c / rclone — with themed progress. ([full-quality MP4](docs/media/yank-demo.mp4))*
+*One command, any source. Downloads **resume automatically** — interrupt and re-run, no flags. Batch a list in parallel (`-i`/`-j`), stream to a pipe (`-o -`), verify against published checksums, and route git / media / torrents / cloud storage / Google Drive to the right backend — all with themed progress. ([full-quality MP4](docs/media/yank-v0.6.mp4))*
 
-> **v0.1.0 is released** — a single static Go binary (Linux & macOS), MIT licensed.
+> **v0.6.4 is released** — a single static Go binary (Linux & macOS), MIT licensed.
 
 ## How it works
 
