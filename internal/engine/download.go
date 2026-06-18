@@ -77,12 +77,10 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 		return nil, err
 	}
 	if opt.Checksum != "" {
-		algo, want, perr := checksum.Parse(opt.Checksum)
-		if perr != nil {
-			return nil, perr
-		}
-		if verr := checksum.VerifyFile(out, algo, want); verr != nil {
-			_ = os.Remove(out) // don't leave a corrupt file in place
+		if verr := checksum.VerifySpec(out, opt.Checksum); verr != nil {
+			if _, isFmt := verr.(*checksum.FormatError); !isFmt {
+				_ = os.Remove(out) // remove a verified-bad file; keep it on a spec error
+			}
 			opt.Sink.Error(verr)
 			return nil, verr
 		}

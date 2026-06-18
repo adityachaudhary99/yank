@@ -217,17 +217,16 @@ func runDispatch(ctx context.Context, d runDispatchDeps, src classify.Source, re
 	outPath := resolvedDispatchPath(outputPath, outputDir)
 	note := ""
 	if spec != "" {
-		algo, want, perr := checksum.Parse(spec)
-		if perr != nil {
-			d.reporter.Error(perr)
-			return withCode(ExitUsage, perr)
-		}
-		if verr := checksum.VerifyFile(outPath, algo, want); verr != nil {
+		if verr := checksum.VerifySpec(outPath, spec); verr != nil {
+			if _, isFmt := verr.(*checksum.FormatError); isFmt {
+				d.reporter.Error(verr)
+				return withCode(ExitUsage, verr)
+			}
 			_ = os.Remove(outPath)
 			d.reporter.Error(verr)
 			return withCode(ExitChecksum, verr)
 		}
-		note = algo + " ok"
+		note = strings.SplitN(spec, ":", 2)[0] + " ok"
 	}
 	d.reporter.Finish(outPath, time.Since(start), note)
 	return nil

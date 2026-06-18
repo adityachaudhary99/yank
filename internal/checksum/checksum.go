@@ -1,6 +1,7 @@
 package checksum
 
 import (
+	"bufio"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -64,6 +65,63 @@ func Compute(r io.Reader, algo string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// VerifySpec verifies path against an "algo:hex" spec. Returns *FormatError for a
+// bad spec, *Mismatch on a digest mismatch, nil on success.
+func VerifySpec(path, spec string) error {
+	algo, want, err := Parse(spec)
+	if err != nil {
+		return err
+	}
+	return VerifyFile(path, algo, want)
+}
+
+// ParseSums parses sha256sum-style lines ("<hex>  <name>" or "<hex> *<name>")
+// into a base-name→lowercase-hex map. A bare "<hex>" line is keyed by "".
+func ParseSums(r io.Reader) (map[string]string, error) {
+	out := map[string]string{}
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		h := strings.ToLower(fields[0])
+		if len(fields) == 1 {
+			out[""] = h
+			continue
+		}
+		name := strings.TrimPrefix(fields[len(fields)-1], "*")
+		out[pathBase(name)] = h
+	}
+	return out, sc.Err()
+}
+
+// AlgoForHex infers the digest algorithm from a hex string's length.
+func AlgoForHex(h string) (string, error) {
+	switch len(h) {
+	case 32:
+		return "md5", nil
+	case 40:
+		return "sha1", nil
+	case 64:
+		return "sha256", nil
+	case 128:
+		return "sha512", nil
+	default:
+		return "", fmt.Errorf("cannot infer checksum algorithm from a %d-char hex", len(h))
+	}
+}
+
+// pathBase returns the last path segment of a slash- or backslash-separated name.
+func pathBase(name string) string {
+	name = strings.ReplaceAll(name, "\\", "/")
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
 }
 
 // VerifyFile computes the digest of path and compares it to want (case-insensitive).
