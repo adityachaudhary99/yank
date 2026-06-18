@@ -71,7 +71,8 @@ yank [flags] <url>...
   -d, --dir <dir>          output directory (default ".")
   -x, --connections <n>    parallel connections (default 8)
   -r, --retries <n>        retry attempts (default 5)
-  -f, --force              overwrite existing files
+  -f, --force              overwrite an existing completed file
+      --fresh              ignore any partial download and start over
   -q, --quiet              suppress progress output
       --checksum <a:hex>   verify download, e.g. sha256:abc...
       --sha256 <hex>       shorthand for --checksum sha256:<hex>
@@ -90,6 +91,11 @@ yank [flags] <url>...
       --timeout <dur>      abort if a transfer stalls (no data) this long, e.g. 30s
       --insecure           skip TLS verification (native + dispatched backends)
 ```
+
+**Resume is automatic.** If a download is interrupted, just run the **same
+command again** — yank picks up where it left off (no `-o` or `-c` needed). Pass
+`--fresh` to discard the partial and start over. `--help` groups flags into
+**Common** and **Advanced**, so the everyday path stays a single word: `yank <url>`.
 
 These flags behave the **same on every route**. Whether yank downloads natively
 or dispatches to git / yt-dlp / aria2c / rclone / curl, you get the same chrome,
