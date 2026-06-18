@@ -70,7 +70,8 @@ yank [flags] <url>...
   -o, --output <path>      output file path (- for stdout)
   -i, --input <file>       read URLs from a file, one per line (- for stdin)
   -d, --dir <dir>          output directory (default ".")
-  -x, --connections <n>    parallel connections (default 8)
+  -x, --connections <n>    parallel connections per download (default 8)
+  -j, --jobs <n>           download up to N URLs concurrently (default 1)
   -r, --retries <n>        retry attempts (default 5)
   -f, --force              overwrite an existing completed file
       --fresh              ignore any partial download and start over
@@ -123,6 +124,9 @@ yank https://a/x.bin https://b/y.bin -d ./downloads
 # download every URL in a file (one per line; # comments ok), or pipe from stdin
 yank -i urls.txt -d ./downloads
 grep -o 'https://[^"]*' page.html | yank -i -
+
+# ...and fetch them 4 at a time
+yank -i urls.txt -d ./downloads -j 4
 
 # stream straight into a pipe (no temp file)
 yank https://example.com/archive.tar.gz -o - | tar xz

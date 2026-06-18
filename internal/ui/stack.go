@@ -18,8 +18,10 @@ type Stack struct {
 	caps  Capabilities
 	now   func() time.Time
 	start time.Time
-	mu    sync.Mutex
+	mu    sync.Mutex // guards kids' counters
 	kids  []*stackChild
+	wmu   sync.Mutex // serializes writes to w (many goroutines render)
+	last  time.Time  // last redraw, for throttling
 }
 
 type stackChild struct {
@@ -95,5 +97,25 @@ func (s *Stack) render() {
 	if s.w == nil || !s.caps.TTY {
 		return
 	}
-	fmt.Fprintf(s.w, "\r%s", s.Footer())
+	footer := s.Footer()
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	now := s.now()
+	if now.Sub(s.last) < 50*time.Millisecond {
+		return // throttle repaints under many concurrent updates
+	}
+	s.last = now
+	fmt.Fprintf(s.w, "\r%s\x1b[K", footer)
+}
+
+// Done draws a final footer and moves to a new line, so later output doesn't
+// collide with the live aggregate line. No-op off a TTY.
+func (s *Stack) Done() {
+	if s.w == nil || !s.caps.TTY {
+		return
+	}
+	footer := s.Footer()
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	fmt.Fprintf(s.w, "\r%s\x1b[K\n", footer)
 }

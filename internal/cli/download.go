@@ -16,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adityachaudhary99/yank/internal/auth"
@@ -27,6 +28,7 @@ import (
 	"github.com/adityachaudhary99/yank/internal/engine"
 	"github.com/adityachaudhary99/yank/internal/progress"
 	"github.com/adityachaudhary99/yank/internal/route"
+	"github.com/adityachaudhary99/yank/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +37,7 @@ type downloadFlags struct {
 	input        string
 	dir          string
 	connections  int
+	jobs         int
 	retries      int
 	force        bool
 	fresh        bool
@@ -78,6 +81,9 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
+	if len(urls) > 1 && f.output != "" && f.output != "-" {
+		return withCode(ExitUsage, fmt.Errorf("-o sets one filename; use -d <dir> for multiple URLs"))
+	}
 	if f.output == "-" && len(urls) > 1 {
 		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only valid with a single URL"))
 	}
@@ -88,10 +94,13 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 		}
 		return downloadWithMirrors(ctx, cmd, f, urls[0], passthrough)
 	}
+	if f.jobs > 1 && len(urls) > 1 {
+		return downloadConcurrent(ctx, cmd, f, urls, passthrough)
+	}
 	var failures int
 	var lastErr error
 	for _, raw := range urls {
-		if err := downloadOne(ctx, cmd, f, raw, passthrough); err != nil {
+		if err := downloadOne(ctx, cmd, f, raw, passthrough, nil); err != nil {
 			failures++
 			lastErr = err
 			if len(urls) > 1 { // in a batch, label each failure with its URL
@@ -112,8 +121,10 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 }
 
 // downloadOne classifies raw and runs it via the native engine or a dispatched
-// backend (or prints the dry-run plan).
-func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string, passthrough []string) error {
+// backend (or prints the dry-run plan). A non-nil sink overrides the native
+// progress sink (used by the concurrent path's shared Stack); when set, the
+// dispatch path runs quietly so concurrent tool output doesn't garble.
+func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string, passthrough []string, sink progress.Sink) error {
 	src := classify.Classify(raw)
 	if f.backend != "" && f.backend != "auto" {
 		src.Backend = f.backend
@@ -129,9 +140,9 @@ func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw 
 		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only supported for direct HTTP(S) downloads, not %s", src.Backend))
 	}
 	if src.Backend == "native" {
-		return nativeGet(ctx, cmd, f, raw)
+		return nativeGet(ctx, cmd, f, raw, sink)
 	}
-	return dispatchWithInstall(ctx, cmd, f, src, passthrough)
+	return dispatchWithInstall(ctx, cmd, f, src, passthrough, sink != nil)
 }
 
 // downloadWithMirrors tries the primary URL, then each --mirror in order, and
@@ -143,13 +154,84 @@ func downloadWithMirrors(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		if i > 0 {
 			cmd.PrintErrln("yank: primary failed; trying mirror", c)
 		}
-		if err := downloadOne(ctx, cmd, f, c, passthrough); err == nil {
+		if err := downloadOne(ctx, cmd, f, c, passthrough, nil); err == nil {
 			return nil
 		} else {
 			lastErr = err
 		}
 	}
 	return lastErr
+}
+
+// downloadConcurrent runs the URL list through a worker pool of f.jobs, sharing a
+// single themed Stack (aggregate progress) on a TTY, then prints a per-URL
+// summary and the standard partial/all-failed exit code.
+func downloadConcurrent(ctx context.Context, cmd *cobra.Command, f *downloadFlags, urls, passthrough []string) error {
+	sinks, stack := concurrentSinks(cmd, f, urls)
+	sem := make(chan struct{}, f.jobs)
+	var wg sync.WaitGroup
+	results := make([]error, len(urls))
+	for i, raw := range urls {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, raw string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			results[i] = downloadOne(ctx, cmd, f, raw, passthrough, sinks[i])
+		}(i, raw)
+	}
+	wg.Wait()
+	if stack != nil {
+		stack.Done()
+	}
+	failures := 0
+	for i, err := range results {
+		if err != nil {
+			failures++
+			cmd.PrintErrln("yank:", displayName(urls[i], ""), "—", err)
+		}
+	}
+	switch {
+	case failures == 0:
+		return nil
+	case failures < len(urls):
+		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(urls)))
+	default:
+		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(urls)))
+	}
+}
+
+// concurrentSinks builds one progress.Sink per URL for the concurrent path. On a
+// themed TTY they share a Stack (one aggregate line); --json gives each its own
+// NDJSON sink; --quiet / non-TTY are silent.
+func concurrentSinks(cmd *cobra.Command, f *downloadFlags, urls []string) ([]progress.Sink, *ui.Stack) {
+	sinks := make([]progress.Sink, len(urls))
+	switch {
+	case f.jsonOut:
+		for i, u := range urls {
+			sinks[i] = progress.NewJSON(cmd.OutOrStdout(), displayName(u, ""))
+		}
+		return sinks, nil
+	case f.quiet || !isTerminal(cmd.OutOrStdout()):
+		for i := range sinks {
+			sinks[i] = progress.NewSilent()
+		}
+		return sinks, nil
+	default:
+		theme, ok := ui.ByName(f.theme)
+		if !ok {
+			theme = ui.Default()
+		}
+		caps := ui.Detect(ui.Env{
+			Getenv: os.Getenv, IsTTY: isTerminal(cmd.OutOrStdout()),
+			Width: terminalWidth(cmd.OutOrStdout()), ColorCfg: f.color, ForceASCII: f.ascii,
+		})
+		names := make([]string, len(urls))
+		for i, u := range urls {
+			names[i] = displayName(u, "")
+		}
+		return ui.New(cmd.OutOrStdout(), theme, caps, names)
+	}
 }
 
 // checksumCapableBackends are dispatch backends whose single output file can be
@@ -316,7 +398,7 @@ func resolvedDispatchPath(output, dir string) string {
 // dispatchWithInstall routes a non-native source to its backend. It gates
 // checksum requests up front (fail fast), installs a missing tool if needed
 // (with visible streams), then runs the transfer with unified chrome.
-func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string) error {
+func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFlags, src classify.Source, passthrough []string, quiet bool) error {
 	reg := backend.DefaultRegistry()
 	b, ok := reg.Get(src.Backend)
 	if !ok {
@@ -357,11 +439,17 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		}
 	}
 
-	// Mode-routed runner + reporter for the actual transfer.
+	// Mode-routed runner + reporter for the actual transfer. Under concurrency
+	// (quiet), suppress the backend's chrome/output so jobs don't garble each other.
 	so, se := dispatchStreams(f)
+	reporter := newDispatchReporter(cmd.OutOrStdout(), f, displayName(src.Raw, f.output))
+	if quiet {
+		so, se = io.Discard, io.Discard
+		reporter = silentReporter{}
+	}
 	deps := runDispatchDeps{
 		runner:   backend.ExecRunner{Stdout: so, Stderr: se},
-		reporter: newDispatchReporter(cmd.OutOrStdout(), f, displayName(src.Raw, f.output)),
+		reporter: reporter,
 		reg:      reg,
 	}
 	return runDispatch(ctx, deps, src, route.Request{
@@ -414,7 +502,7 @@ func runDispatch(ctx context.Context, d runDispatchDeps, src classify.Source, re
 	return nil
 }
 
-func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string) error {
+func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string, sinkOverride progress.Sink) error {
 	sum, err := effectiveChecksum(cmd, f, raw)
 	if err != nil {
 		return err
@@ -423,7 +511,10 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if sum != "" {
 		algo, _, _ = strings.Cut(sum, ":")
 	}
-	sink := newProgressSink(cmd.OutOrStdout(), f, displayName(raw, f.output), algo)
+	sink := sinkOverride
+	if sink == nil {
+		sink = newProgressSink(cmd.OutOrStdout(), f, displayName(raw, f.output), algo)
+	}
 	basic := f.basic
 	if nb := netrcBasicFor(f, raw); nb != "" {
 		basic = nb
