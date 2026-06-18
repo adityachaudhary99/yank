@@ -49,6 +49,7 @@ type downloadFlags struct {
 	limitRate    string
 	cookiesFile  string
 	netrc        bool
+	mirrors      []string
 	theme        string
 	ascii        bool
 	color        bool
@@ -66,27 +67,16 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 		return cmd.Help()
 	}
 	ctx := cmd.Context()
+	if len(f.mirrors) > 0 {
+		if len(urls) != 1 {
+			return withCode(ExitUsage, fmt.Errorf("--mirror is only valid with a single URL"))
+		}
+		return downloadWithMirrors(ctx, cmd, f, urls[0], passthrough)
+	}
 	var failures int
 	var lastErr error
 	for _, raw := range urls {
-		src := classify.Classify(raw)
-		if f.backend != "" && f.backend != "auto" {
-			src.Backend = f.backend
-			if f.backend != "native" {
-				src.Type = classify.TypeUnknown // force dispatch path
-			}
-		}
-		if f.dryRun {
-			printPlan(cmd, f, src, passthrough)
-			continue
-		}
-		var err error
-		if src.Backend == "native" {
-			err = nativeGet(ctx, cmd, f, raw)
-		} else {
-			err = dispatchWithInstall(ctx, cmd, f, src, passthrough)
-		}
-		if err != nil {
+		if err := downloadOne(ctx, cmd, f, raw, passthrough); err != nil {
 			failures++
 			lastErr = err
 			if len(urls) > 1 { // in a batch, label each failure with its URL
@@ -104,6 +94,44 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	default:
 		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(urls)))
 	}
+}
+
+// downloadOne classifies raw and runs it via the native engine or a dispatched
+// backend (or prints the dry-run plan).
+func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string, passthrough []string) error {
+	src := classify.Classify(raw)
+	if f.backend != "" && f.backend != "auto" {
+		src.Backend = f.backend
+		if f.backend != "native" {
+			src.Type = classify.TypeUnknown // force dispatch path
+		}
+	}
+	if f.dryRun {
+		printPlan(cmd, f, src, passthrough)
+		return nil
+	}
+	if src.Backend == "native" {
+		return nativeGet(ctx, cmd, f, raw)
+	}
+	return dispatchWithInstall(ctx, cmd, f, src, passthrough)
+}
+
+// downloadWithMirrors tries the primary URL, then each --mirror in order, and
+// returns nil on the first success or the last error if all fail.
+func downloadWithMirrors(ctx context.Context, cmd *cobra.Command, f *downloadFlags, primary string, passthrough []string) error {
+	candidates := append([]string{primary}, f.mirrors...)
+	var lastErr error
+	for i, c := range candidates {
+		if i > 0 {
+			cmd.PrintErrln("yank: primary failed; trying mirror", c)
+		}
+		if err := downloadOne(ctx, cmd, f, c, passthrough); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 // checksumCapableBackends are dispatch backends whose single output file can be
