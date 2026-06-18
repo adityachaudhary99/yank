@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-06-18
+
+### Added
+- **`yank config`** — show and change saved defaults: `yank config` (or
+  `config list`) prints all settings, `config get <key>` prints one, and
+  `config set <key> <value>` updates `config.toml`. Keys: `connections`,
+  `retries`, `dir`, `color`, `theme`, `package_manager`.
+- **`--checksums auto`** — opportunistically verify against a sibling checksum
+  file (`<url>.sha256`, `.sha512`, `.sha1`, or `.md5`). The first that exists and
+  lists the file wins; if none is found, yank notes it and downloads unverified.
+
 ## [0.4.2] - 2026-06-18
 
 ### Added
@@ -182,6 +193,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.4.3]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.3
 [0.4.2]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.2
 [0.4.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.1
 [0.4.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.0
