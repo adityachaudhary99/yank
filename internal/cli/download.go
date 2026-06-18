@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -24,12 +25,14 @@ import (
 	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/adityachaudhary99/yank/internal/engine"
+	"github.com/adityachaudhary99/yank/internal/progress"
 	"github.com/adityachaudhary99/yank/internal/route"
 	"github.com/spf13/cobra"
 )
 
 type downloadFlags struct {
 	output       string
+	input        string
 	dir          string
 	connections  int
 	retries      int
@@ -65,8 +68,18 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	f.dir = config.ExpandPath(f.dir)
 	f.output = config.ExpandPath(f.output)
 	urls, passthrough := splitPassthrough(cmd, args)
+	if f.input != "" { // read more URLs from a file or stdin (one per line)
+		extra, err := inputURLs(cmd, f.input)
+		if err != nil {
+			return withCode(ExitUsage, err)
+		}
+		urls = append(urls, extra...)
+	}
 	if len(urls) == 0 {
 		return cmd.Help()
+	}
+	if f.output == "-" && len(urls) > 1 {
+		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only valid with a single URL"))
 	}
 	ctx := cmd.Context()
 	if len(f.mirrors) > 0 {
@@ -111,6 +124,9 @@ func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw 
 	if f.dryRun {
 		printPlan(cmd, f, src, passthrough)
 		return nil
+	}
+	if f.output == "-" && src.Backend != "native" {
+		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only supported for direct HTTP(S) downloads, not %s", src.Backend))
 	}
 	if src.Backend == "native" {
 		return nativeGet(ctx, cmd, f, raw)
@@ -424,6 +440,17 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if err != nil {
 		return withCode(ExitUsage, err)
 	}
+	if f.output == "-" { // stream to stdout (single stream, no resume/checksum)
+		if sum != "" {
+			return withCode(ExitUsage, fmt.Errorf("--checksum/--checksums is not supported with -o - (streaming to stdout)"))
+		}
+		_, err = engine.Download(ctx, engine.Options{
+			URL: raw, Headers: hdr, Client: client, Sink: progress.NewSilent(),
+			Stdout: cmd.OutOrStdout(), Retries: f.retries,
+			StallTimeout: f.timeout, RateLimit: rate,
+		})
+		return err
+	}
 	conns := f.connections
 	if f.noParallel {
 		conns = 1
@@ -565,4 +592,31 @@ func splitPassthrough(cmd *cobra.Command, args []string) (urls, passthrough []st
 		return args[:i], args[i:]
 	}
 	return args, nil
+}
+
+// inputURLs reads URLs from --input: a local file, or "-" for stdin.
+func inputURLs(cmd *cobra.Command, src string) ([]string, error) {
+	if src == "-" {
+		return readInputURLs(cmd.InOrStdin()), nil
+	}
+	b, err := os.ReadFile(config.ExpandPath(src))
+	if err != nil {
+		return nil, err
+	}
+	return readInputURLs(bytes.NewReader(b)), nil
+}
+
+// readInputURLs parses one URL per line, trimming whitespace and skipping blank
+// lines and #-comments.
+func readInputURLs(r io.Reader) []string {
+	var urls []string
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		urls = append(urls, line)
+	}
+	return urls
 }

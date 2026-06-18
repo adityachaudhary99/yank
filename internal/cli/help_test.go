@@ -15,7 +15,7 @@ func TestGroupedHelp(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := out.String()
-	for _, want := range []string{"Common flags:", "Advanced flags:", "--fresh", "--limit-rate", "--output"} {
+	for _, want := range []string{"Common flags:", "Advanced flags:", "Examples:", "--fresh", "--limit-rate", "--output"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("help missing %q\n---\n%s", want, s)
 		}
