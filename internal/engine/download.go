@@ -29,6 +29,7 @@ type Options struct {
 	StallTimeout time.Duration // abort an attempt if no bytes arrive within this; 0 = off
 	RateLimit    int64         // max bytes/sec across the whole transfer; 0 = unlimited
 	Fresh        bool          // ignore any partial .part/state and restart from 0
+	Stdout       io.Writer     // when set, stream the body here (no file/resume/parallel)
 }
 
 // Result reports what was downloaded.
@@ -64,6 +65,16 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	}
 	if opt.Connections < 1 {
 		opt.Connections = 1
+	}
+
+	if opt.Stdout != nil { // stream to stdout: no probe/file/resume/parallel
+		n, serr := downloadStream(ctx, opt)
+		if serr != nil {
+			opt.Sink.Error(serr)
+			return nil, serr
+		}
+		opt.Sink.Finish("-")
+		return &Result{Path: "-", Bytes: n}, nil
 	}
 
 	meta, err := Probe(ctx, opt.Client, opt.URL, opt.Headers)
@@ -103,6 +114,52 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	}
 	opt.Sink.Finish(out)
 	return &Result{Path: out, Bytes: n}, nil
+}
+
+// downloadStream copies the body straight to opt.Stdout. There's no resume (you
+// can't rewind stdout), so a failure after bytes are already out is permanent;
+// a failure before any byte (0 written) is still retried.
+func downloadStream(ctx context.Context, opt Options) (int64, error) {
+	var lim *throttle
+	if opt.RateLimit > 0 {
+		lim = newThrottle(opt.RateLimit, time.Now)
+	}
+	var written int64
+	err := withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
+		attemptCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		req, rerr := http.NewRequestWithContext(attemptCtx, http.MethodGet, opt.URL, nil)
+		if rerr != nil {
+			return rerr
+		}
+		applyHeaders(req, opt.Headers)
+		resp, rerr := opt.Client.Do(req)
+		if rerr != nil {
+			return rerr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			e := &StatusError{Code: resp.StatusCode, Status: resp.Status}
+			if resp.StatusCode < 500 {
+				return Permanent(e)
+			}
+			return e
+		}
+		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
+		defer body.Stop()
+		var src io.Reader = body
+		if lim != nil {
+			src = &rateLimitedReader{r: body, t: lim, ctx: attemptCtx}
+		}
+		n, cerr := io.Copy(opt.Stdout, src)
+		written += n
+		if cerr != nil && n > 0 {
+			// bytes already streamed — can't resume stdout, so don't retry.
+			return Permanent(fmt.Errorf("stream interrupted after %d bytes (cannot resume to stdout): %w", n, cerr))
+		}
+		return cerr
+	})
+	return written, err
 }
 
 // downloadSingle streams the body to a .part file (resuming from an existing

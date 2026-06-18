@@ -25,6 +25,7 @@ import (
 	"github.com/adityachaudhary99/yank/internal/config"
 	"github.com/adityachaudhary99/yank/internal/doctor"
 	"github.com/adityachaudhary99/yank/internal/engine"
+	"github.com/adityachaudhary99/yank/internal/progress"
 	"github.com/adityachaudhary99/yank/internal/route"
 	"github.com/spf13/cobra"
 )
@@ -77,6 +78,9 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
+	if f.output == "-" && len(urls) > 1 {
+		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only valid with a single URL"))
+	}
 	ctx := cmd.Context()
 	if len(f.mirrors) > 0 {
 		if len(urls) != 1 {
@@ -120,6 +124,9 @@ func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw 
 	if f.dryRun {
 		printPlan(cmd, f, src, passthrough)
 		return nil
+	}
+	if f.output == "-" && src.Backend != "native" {
+		return withCode(ExitUsage, fmt.Errorf("-o - (stdout) is only supported for direct HTTP(S) downloads, not %s", src.Backend))
 	}
 	if src.Backend == "native" {
 		return nativeGet(ctx, cmd, f, raw)
@@ -432,6 +439,17 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	client, err := newHTTPClient(f, hdr)
 	if err != nil {
 		return withCode(ExitUsage, err)
+	}
+	if f.output == "-" { // stream to stdout (single stream, no resume/checksum)
+		if sum != "" {
+			return withCode(ExitUsage, fmt.Errorf("--checksum/--checksums is not supported with -o - (streaming to stdout)"))
+		}
+		_, err = engine.Download(ctx, engine.Options{
+			URL: raw, Headers: hdr, Client: client, Sink: progress.NewSilent(),
+			Stdout: cmd.OutOrStdout(), Retries: f.retries,
+			StallTimeout: f.timeout, RateLimit: rate,
+		})
+		return err
 	}
 	conns := f.connections
 	if f.noParallel {
