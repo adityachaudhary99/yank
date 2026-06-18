@@ -30,6 +30,11 @@ type InstallOptions struct {
 // own [Y/n] prompt), so the package manager must not prompt a second time.
 // Returns nil for an unknown/empty manager.
 func InstallArgv(manager string, tools ...string) []string {
+	for _, t := range tools {
+		if isPipTool(t) {
+			return nil // hint-only: Install prints InstallHint and returns an error
+		}
+	}
 	pkgs := make([]string, len(tools))
 	for i, t := range tools {
 		pkgs[i] = PackageName(t)
