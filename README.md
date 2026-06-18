@@ -24,7 +24,7 @@ yank https://drive.google.com/file/d/ID   # gdown
 `yank` is a **hybrid**:
 
 - **Native engine** for HTTP(S) — a dependency-free Go downloader with parallel chunked transfers (HTTP Range), resume from a partial `.part`, automatic retries with backoff, and checksum verification.
-- **Smart dispatch** for everything else — it classifies the URL and delegates to the best specialist tool already on your system: `git`, `yt-dlp`, `aria2c`, `curl` (FTP), or `rclone` (cloud).
+- **Smart dispatch** for everything else — it classifies the URL and delegates to the best specialist tool already on your system: `git`, `yt-dlp`, `aria2c`, `curl` (FTP), `rclone` (cloud), or `gdown` (Google Drive).
 
 You get one consistent interface, the speed of a real download accelerator for plain files, and the breadth of the whole ecosystem for everything else.
 
@@ -223,6 +223,10 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
 - **v0.6.1 (shipped)** — `-j/--jobs` parallel multi-URL with aggregate progress.
 - **v0.6.2 (shipped)** — `--color auto|always|never` (+ `FORCE_COLOR`),
   `-v/--verbose` routing trace, and error next-step hints.
+- **v0.6.3 (shipped)** — internal hardening: typed exit-code sentinels and a
+  flag struct partitioned by concern (no behavior change).
+- **v0.6.4 (shipped)** — fix: the matrix theme's progress bar no longer floods
+  the terminal (its sparkline is budgeted to the line width).
 
 ## License
 

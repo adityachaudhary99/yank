@@ -282,6 +282,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.6.4]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.4
 [0.6.3]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.3
 [0.6.2]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.2
 [0.6.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.1
