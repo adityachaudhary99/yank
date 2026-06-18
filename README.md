@@ -83,6 +83,7 @@ yank [flags] <url>...
       --bearer <token>     bearer token
       --cookies <file>     send a Netscape cookie jar with requests
       --netrc              use ~/.netrc (or $NETRC) for host credentials
+      --mirror <url>       alternate URL for the same file, tried on failure (repeatable)
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
       --limit-rate <rate>  cap the download rate, e.g. 500k or 1M
@@ -111,6 +112,9 @@ yank https://api.example.com/artifact -H 'Accept: application/octet-stream' --be
 
 # download several files; exit code 7 if some (but not all) fail
 yank https://a/x.bin https://b/y.bin -d ./downloads
+
+# one file with fallback mirrors — tried in order until one works
+yank https://main.example/app.tar.gz --mirror https://mirror1/app.tar.gz --mirror https://mirror2/app.tar.gz
 
 # script-friendly progress — works the same for a dispatched backend
 yank --json https://example.com/big.iso | jq -c .
@@ -190,7 +194,8 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
   on the native engine and curl / yt-dlp / aria2c.
 - **v0.4.3 (shipped)** — a `yank config` subcommand and `--checksums auto`
   (sibling `.sha256`/`.md5` probe).
-- **v0.4.x (next)** — mirrors and parallel multi-URL downloads.
+- **v0.4.4 (shipped)** — `--mirror <url>` fallback URLs for a single download.
+- **v0.4.x (next)** — parallel multi-URL downloads.
 
 ## License
 

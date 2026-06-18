@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-06-18
+
+### Added
+- **`--mirror <url>`** (repeatable) — alternate URLs for the same file. yank tries
+  the primary URL first and falls back to each mirror in order until one
+  succeeds. Each candidate is classified independently (a mirror can use a
+  different backend). Only valid with a single URL — combining `--mirror` with
+  multiple URLs is a usage error.
+
 ## [0.4.3] - 2026-06-18
 
 ### Added
@@ -193,6 +202,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.4.4]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.4
 [0.4.3]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.3
 [0.4.2]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.2
 [0.4.1]: https://github.com/adityachaudhary99/yank/releases/tag/v0.4.1

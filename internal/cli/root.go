@@ -63,6 +63,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.StringVar(&f.limitRate, "limit-rate", "", "limit download rate, e.g. 500k or 1M (0 = unlimited)")
 	pf.StringVar(&f.cookiesFile, "cookies", "", "Netscape cookie jar file to send with requests")
 	pf.BoolVar(&f.netrc, "netrc", false, "use ~/.netrc (or $NETRC) for host credentials")
+	pf.StringArrayVar(&f.mirrors, "mirror", nil, "alternate URL for the same file; tried if the primary fails (repeatable)")
 	f.color = cfg.Color
 
 	// Presentation + install flags are persistent so subcommands (doctor,
