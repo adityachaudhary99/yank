@@ -44,6 +44,11 @@ var packageNames = map[string]string{
 	"aria2c": "aria2",
 }
 
+// pipTools install via pip/pipx rather than a system package manager.
+var pipTools = map[string]bool{"gdown": true}
+
+func isPipTool(tool string) bool { return pipTools[tool] }
+
 // PackageName returns the package to install for a tool's binary name.
 func PackageName(tool string) string {
 	if p, ok := packageNames[tool]; ok {
@@ -54,6 +59,9 @@ func PackageName(tool string) string {
 
 // InstallHint returns a copy-pasteable install command for tool under manager.
 func InstallHint(tool, manager string) string {
+	if isPipTool(tool) {
+		return "pipx install " + tool + "  (or: pip install --user " + tool + ")"
+	}
 	pkg := PackageName(tool)
 	switch manager {
 	case "apt":

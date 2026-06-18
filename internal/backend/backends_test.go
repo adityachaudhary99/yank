@@ -121,3 +121,36 @@ func TestBackendInsecure(t *testing.T) {
 		t.Errorf("curl should not be insecure by default: %q", got)
 	}
 }
+
+func TestGdownBackend(t *testing.T) {
+	src := classify.Classify("https://drive.google.com/file/d/ABC/view")
+	argv, _ := Gdown{}.Build(Request{Source: src, Output: "out.bin", OutputDir: "/tmp"})
+	got := strings.Join(argv, " ")
+	if !strings.HasPrefix(got, "gdown --fuzzy") || !strings.Contains(got, "-O "+filepath.Join("/tmp", "out.bin")) {
+		t.Fatalf("gdown argv = %q", got)
+	}
+	argv2, _ := Gdown{}.Build(Request{Source: src})
+	if got := strings.Join(argv2, " "); strings.Contains(got, "-O") {
+		t.Errorf("gdown without -o should not pass -O: %q", got)
+	}
+}
+
+func TestBackendRateLimit(t *testing.T) {
+	src := classify.Classify("https://h/f.bin")
+	out := func(b Backend) string {
+		argv, _ := b.Build(Request{Source: src, RateLimit: "1M"})
+		return strings.Join(argv, " ")
+	}
+	if got := out(Curl{}); !strings.Contains(got, "--limit-rate 1M") {
+		t.Errorf("curl rate: %q", got)
+	}
+	if got := out(Aria2c{}); !strings.Contains(got, "--max-overall-download-limit=1M") {
+		t.Errorf("aria2c rate: %q", got)
+	}
+	if got := out(Ytdlp{}); !strings.Contains(got, "--limit-rate 1M") {
+		t.Errorf("yt-dlp rate: %q", got)
+	}
+	if got := out(Rclone{}); !strings.Contains(got, "--bwlimit 1M") {
+		t.Errorf("rclone rate: %q", got)
+	}
+}

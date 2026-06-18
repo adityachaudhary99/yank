@@ -27,6 +27,7 @@ type Options struct {
 	Checksum    string // "algo:hex"; empty to skip
 
 	StallTimeout time.Duration // abort an attempt if no bytes arrive within this; 0 = off
+	RateLimit    int64         // max bytes/sec across the whole transfer; 0 = unlimited
 }
 
 // Result reports what was downloaded.
@@ -95,6 +96,11 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (int64, error) {
 	part := out + ".part"
 
+	var lim *throttle
+	if opt.RateLimit > 0 {
+		lim = newThrottle(opt.RateLimit, time.Now)
+	}
+
 	// Decide whether we can resume from an existing partial.
 	var offset int64
 	if st, _ := LoadState(out); st.compatibleForSingle(meta) && meta.SupportsRanges {
@@ -159,8 +165,12 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		}
 		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
 		defer body.Stop()
+		var src io.Reader = body
+		if lim != nil {
+			src = &rateLimitedReader{r: body, t: lim, ctx: attemptCtx}
+		}
 		cw := &countingWriter{w: f, n: offset, total: meta.Size, sink: opt.Sink}
-		_, cerr := io.Copy(cw, body)
+		_, cerr := io.Copy(cw, src)
 		written = cw.n
 		offset = written // resume from here if this attempt failed mid-stream
 		return cerr

@@ -95,3 +95,12 @@ func TestInstallArgvNonInteractiveAllManagers(t *testing.T) {
 		t.Error("unknown manager should return nil")
 	}
 }
+
+func TestGdownPipHint(t *testing.T) {
+	if InstallArgv("apt", "gdown") != nil {
+		t.Error("gdown is pip-based; InstallArgv should be nil (hint-only)")
+	}
+	if h := InstallHint("gdown", "apt"); !strings.Contains(h, "pipx install gdown") {
+		t.Errorf("InstallHint(gdown) = %q, want pipx", h)
+	}
+}

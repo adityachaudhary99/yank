@@ -16,7 +16,7 @@ func newInstallDepsCmd(f *downloadFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tools := args
 			if len(tools) == 0 {
-				tools = []string{"git", "rclone", "yt-dlp", "aria2c", "curl"}
+				tools = backend.DefaultRegistry().Tools()
 			}
 			mgr := resolveAndRememberManager(f)
 			return doctor.Install(backend.ExecRunner{}, mgr, tools, doctor.InstallOptions{

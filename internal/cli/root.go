@@ -59,6 +59,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVar(&f.noParallel, "no-parallel", false, "force a single connection")
 	pf.DurationVar(&f.timeout, "timeout", 0, "abort if a transfer stalls this long with no data (e.g. 30s); 0 = none")
 	pf.BoolVar(&f.insecure, "insecure", false, "skip TLS certificate verification")
+	pf.StringVar(&f.limitRate, "limit-rate", "", "limit download rate, e.g. 500k or 1M (0 = unlimited)")
 	f.color = cfg.Color
 
 	// Presentation + install flags are persistent so subcommands (doctor,

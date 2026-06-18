@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"sort"
 
 	"github.com/adityachaudhary99/yank/internal/classify"
 )
@@ -14,6 +15,7 @@ type Request struct {
 	OutputDir   string
 	Output      string
 	Insecure    bool     // skip TLS verification (maps to each tool's flag)
+	RateLimit   string   // download rate cap (e.g. "1M"), passed to each tool's flag
 	Passthrough []string // user args after "--"
 }
 
@@ -72,6 +74,21 @@ func (r *Registry) Get(name string) (Backend, bool) {
 	return b, ok
 }
 
+// Tools returns the sorted, de-duplicated set of external tools across all
+// registered backends.
+func (r *Registry) Tools() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, b := range r.m {
+		if t := b.Tool(); t != "" && !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // DefaultRegistry returns a registry with all built-in backends registered.
 func DefaultRegistry() *Registry {
 	r := NewRegistry()
@@ -80,5 +97,6 @@ func DefaultRegistry() *Registry {
 	r.Register(Aria2c{})
 	r.Register(Curl{})
 	r.Register(Rclone{})
+	r.Register(Gdown{})
 	return r
 }

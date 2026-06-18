@@ -73,6 +73,12 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		}
 	}
 
+	// One throttle shared across all chunks → the limit is an overall cap.
+	var lim *throttle
+	if opt.RateLimit > 0 {
+		lim = newThrottle(opt.RateLimit, time.Now)
+	}
+
 	gctx, cancelGroup := context.WithCancel(ctx)
 	defer cancelGroup()
 	sem := make(chan struct{}, opt.Connections)
@@ -89,7 +95,7 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		go func(c chunk) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := fetchChunk(gctx, opt, f, c, prog, report); err != nil {
+			if err := fetchChunk(gctx, opt, f, c, prog, report, lim); err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
@@ -138,7 +144,7 @@ func planChunks(size int64, n int) []chunk {
 // fetchChunk downloads chunk c into f, resuming from prog[c.index] bytes already
 // written. offset is kept across retries (in the closure) so a mid-chunk failure
 // continues rather than re-downloading. report and prog are advanced per write.
-func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []int64, report func(int)) error {
+func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []int64, report func(int), lim *throttle) error {
 	offset := c.start + prog[c.index]
 	return withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
 		if offset > c.end {
@@ -185,6 +191,15 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 				offset += int64(n)
 				atomic.AddInt64(&prog[c.index], int64(n))
 				report(n)
+				if lim != nil {
+					if d := lim.take(n); d > 0 {
+						select {
+						case <-attemptCtx.Done():
+							return attemptCtx.Err()
+						case <-time.After(d):
+						}
+					}
+				}
 			}
 			if rerr == io.EOF {
 				return nil

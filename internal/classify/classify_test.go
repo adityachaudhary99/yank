@@ -12,7 +12,7 @@ func TestClassify(t *testing.T) {
 		{"https://site.com/file.torrent", TypeTorrent, "aria2c"},
 		{"https://youtu.be/dQw4w9WgXcQ", TypeMedia, "yt-dlp"},
 		{"https://www.youtube.com/watch?v=x", TypeMedia, "yt-dlp"},
-		{"https://drive.google.com/file/d/ABC/view", TypeCloud, "rclone"},
+		{"https://drive.google.com/file/d/ABC/view", TypeCloud, "gdown"},
 		{"https://my-bucket.s3.amazonaws.com/k", TypeCloud, "rclone"},
 		{"https://github.com/cli/cli", TypeRepo, "git"},
 		{"https://github.com/cli/cli/", TypeRepo, "git"},
@@ -35,5 +35,20 @@ func TestClassify(t *testing.T) {
 				t.Errorf("got (%v,%q) want (%v,%q)", s.Type, s.Backend, c.typ, c.backend)
 			}
 		})
+	}
+}
+
+func TestClassifyDriveToGdown(t *testing.T) {
+	for _, u := range []string{
+		"https://drive.google.com/file/d/ABC/view",
+		"https://docs.google.com/document/d/XYZ/edit",
+	} {
+		s := Classify(u)
+		if s.Backend != "gdown" {
+			t.Errorf("Classify(%q).Backend = %q, want gdown", u, s.Backend)
+		}
+	}
+	if s := Classify("https://storage.googleapis.com/b/o"); s.Backend != "rclone" {
+		t.Errorf("gcs should stay rclone, got %q", s.Backend)
 	}
 }
