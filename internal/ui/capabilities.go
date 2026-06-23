@@ -8,6 +8,7 @@ type Capabilities struct {
 	Color   bool
 	Unicode bool
 	Width   int
+	Plain   bool // line-oriented, append-only, no animation/color (accessibility)
 }
 
 // Env abstracts environment + terminal probing so detection is testable.
@@ -17,11 +18,17 @@ type Env struct {
 	Width      int
 	Color      string // "auto" (default) | "always" | "never"
 	ForceASCII bool   // --ascii flag (forces no color and no unicode)
+	Plain      bool   // --plain/--accessible flag (forces plain mode)
 }
 
 // Detect computes Capabilities from the environment. Color precedence: --ascii or
 // --color=never disable; --color=always enables; otherwise "auto" = on when a TTY
 // with NO_COLOR unset, and FORCE_COLOR forces it on (e.g. through a pipe).
+//
+// Plain mode (line-oriented, no animation/color — for screen readers, CI logs,
+// and dumb terminals) is forced by the --plain/--accessible flag or by the
+// ACCESSIBLE / CI environment variables (present and non-empty) or TERM=dumb.
+// Plain implies no color and no unicode, so the output is pure ASCII.
 func Detect(e Env) Capabilities {
 	get := e.Getenv
 	if get == nil {
@@ -31,9 +38,10 @@ func Detect(e Env) Capabilities {
 	if width <= 0 {
 		width = 80
 	}
+	plain := e.Plain || get("ACCESSIBLE") != "" || get("CI") != "" || get("TERM") == "dumb"
 	var color bool
 	switch {
-	case e.ForceASCII, e.Color == "never":
+	case plain, e.ForceASCII, e.Color == "never":
 		color = false
 	case e.Color == "always":
 		color = true
@@ -43,8 +51,8 @@ func Detect(e Env) Capabilities {
 			color = true
 		}
 	}
-	unicode := !e.ForceASCII && localeIsUTF8(get)
-	return Capabilities{TTY: e.IsTTY, Color: color, Unicode: unicode, Width: width}
+	unicode := !plain && !e.ForceASCII && localeIsUTF8(get)
+	return Capabilities{TTY: e.IsTTY, Color: color, Unicode: unicode, Width: width, Plain: plain}
 }
 
 func localeIsUTF8(get func(string) string) bool {

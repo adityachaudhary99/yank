@@ -66,3 +66,50 @@ func TestDetectCapabilities(t *testing.T) {
 		t.Fatal("non-UTF-8 locale must disable unicode")
 	}
 }
+
+func TestDetectPlain(t *testing.T) {
+	// A rich TTY is not plain.
+	base := Env{
+		Getenv: func(k string) string { return map[string]string{"LANG": "en_US.UTF-8"}[k] },
+		IsTTY:  true, Width: 100, Color: "auto",
+	}
+	if Detect(base).Plain {
+		t.Fatal("a rich TTY must not be plain")
+	}
+
+	// Each trigger forces plain — and plain forces color + unicode off, so the
+	// output is pure ASCII with no animation regardless of the terminal.
+	triggers := []struct {
+		name string
+		env  map[string]string
+		flag bool
+	}{
+		{"--plain flag", map[string]string{"LANG": "en_US.UTF-8"}, true},
+		{"ACCESSIBLE env", map[string]string{"LANG": "en_US.UTF-8", "ACCESSIBLE": "1"}, false},
+		{"TERM=dumb", map[string]string{"LANG": "en_US.UTF-8", "TERM": "dumb"}, false},
+		{"CI env", map[string]string{"LANG": "en_US.UTF-8", "CI": "true"}, false},
+	}
+	for _, tc := range triggers {
+		e := base
+		e.Plain = tc.flag
+		e.Getenv = func(k string) string { return tc.env[k] }
+		c := Detect(e)
+		if !c.Plain {
+			t.Fatalf("%s must force plain", tc.name)
+		}
+		if c.Color {
+			t.Fatalf("%s: plain must disable color", tc.name)
+		}
+		if c.Unicode {
+			t.Fatalf("%s: plain must disable unicode", tc.name)
+		}
+	}
+
+	// An empty ACCESSIBLE / CI value does not trigger plain (matches NO_COLOR's
+	// "present and non-empty" rule).
+	empty := base
+	empty.Getenv = func(k string) string { return map[string]string{"LANG": "en_US.UTF-8", "CI": "", "ACCESSIBLE": ""}[k] }
+	if Detect(empty).Plain {
+		t.Fatal("empty CI/ACCESSIBLE must not trigger plain")
+	}
+}
