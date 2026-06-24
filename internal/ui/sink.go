@@ -32,10 +32,15 @@ type sink struct {
 	mu     sync.Mutex
 }
 
-// NewSink returns a themed progress.Sink. name is the transfer label; sum is the
-// checksum algorithm (or "") shown on the completion card. newSink is the test
-// seam taking an injectable clock.
+// NewSink returns a progress.Sink for the resolved capabilities: a plain
+// line-oriented sink when c.Plain (accessibility / CI / dumb terminal), else the
+// themed animated sink. name is the transfer label; sum is the checksum algorithm
+// (or "") shown on the completion card. newSink is the test seam taking an
+// injectable clock.
 func NewSink(w io.Writer, t Theme, c Capabilities, name, sum string) progress.Sink {
+	if c.Plain {
+		return newPlainSink(w, time.Now, name, sum)
+	}
 	return newSink(w, t, c, time.Now, name, sum)
 }
 
