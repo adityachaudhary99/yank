@@ -24,14 +24,23 @@ func newProgressSink(out io.Writer, f *downloadFlags, name, sum string) progress
 	if !ok {
 		theme = ui.Default()
 	}
-	env := ui.Env{
+	return ui.NewSink(out, theme, ui.Detect(uiEnv(out, f)), name, sum)
+}
+
+// uiEnv builds the terminal-capability probe for out from the presentation
+// flags. Shared by newProgressSink, the concurrent Stack, and the dispatch
+// reporter so they resolve color/unicode/plain identically. Plain mode is the
+// union of --plain and --accessible (ACCESSIBLE/CI/TERM=dumb are detected from
+// the environment inside ui.Detect).
+func uiEnv(out io.Writer, f *downloadFlags) ui.Env {
+	return ui.Env{
 		Getenv:     os.Getenv,
 		IsTTY:      isTerminal(out),
 		Width:      terminalWidth(out),
 		Color:      f.colorMode,
 		ForceASCII: f.ascii,
+		Plain:      f.plain || f.accessible,
 	}
-	return ui.NewSink(out, theme, ui.Detect(env), name, sum)
 }
 
 func isTerminal(w io.Writer) bool {

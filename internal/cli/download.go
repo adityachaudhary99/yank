@@ -64,10 +64,12 @@ type transferFlags struct {
 
 // presentFlags control how output looks and how much is explained.
 type presentFlags struct {
-	theme     string
-	ascii     bool
-	colorMode string // --color: auto|always|never
-	verbose   bool   // -v: print routing/probe decisions
+	theme      string
+	ascii      bool
+	colorMode  string // --color: auto|always|never
+	verbose    bool   // -v: print routing/probe decisions
+	plain      bool   // --plain: line-oriented output, no animation/color
+	accessible bool   // --accessible: plain output for screen readers (also ACCESSIBLE env)
 }
 
 // installFlags control backend auto-install, shared with the doctor and
@@ -246,10 +248,7 @@ func concurrentSinks(cmd *cobra.Command, f *downloadFlags, urls []string) ([]pro
 		if !ok {
 			theme = ui.Default()
 		}
-		caps := ui.Detect(ui.Env{
-			Getenv: os.Getenv, IsTTY: isTerminal(cmd.OutOrStdout()),
-			Width: terminalWidth(cmd.OutOrStdout()), Color: f.colorMode, ForceASCII: f.ascii,
-		})
+		caps := ui.Detect(uiEnv(cmd.OutOrStdout(), f))
 		names := make([]string, len(urls))
 		for i, u := range urls {
 			names[i] = displayName(u, "")

@@ -79,6 +79,8 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 		defaultColor = "never"
 	}
 	pf.StringVar(&f.colorMode, "color", defaultColor, "colorize output: auto|always|never")
+	pf.BoolVar(&f.plain, "plain", false, "line-oriented output: no progress bar, color, or animation")
+	pf.BoolVar(&f.accessible, "accessible", false, "accessibility mode: plain, screen-reader-friendly output (also via ACCESSIBLE / CI / TERM=dumb)")
 
 	// Presentation + install flags are persistent so subcommands (doctor,
 	// install-deps) and the download path share them.

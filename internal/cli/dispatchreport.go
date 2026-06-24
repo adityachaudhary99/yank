@@ -31,13 +31,7 @@ func newDispatchReporter(out io.Writer, f *downloadFlags, name string) dispatchR
 	if !ok {
 		theme = ui.Default()
 	}
-	caps := ui.Detect(ui.Env{
-		Getenv:     os.Getenv,
-		IsTTY:      isTerminal(out),
-		Width:      terminalWidth(out),
-		Color:      f.colorMode,
-		ForceASCII: f.ascii,
-	})
+	caps := ui.Detect(uiEnv(out, f))
 	return &themedReporter{out: out, theme: theme, caps: caps}
 }
 
