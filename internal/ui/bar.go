@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // sparkRamp is the 8-level block ramp used for the speed sparkline (Unicode).
@@ -81,6 +83,61 @@ func barWidth(termWidth int) int {
 		w = 30
 	}
 	return w
+}
+
+// dispWidth is the terminal column width of s (East-Asian wide runes count 2,
+// combining marks 0), so layout math matches what the terminal actually renders.
+func dispWidth(s string) int { return runewidth.StringWidth(s) }
+
+// truncName shortens name to at most budget display columns, appending an
+// ellipsis when it doesn't fit. budget <= 0 yields "".
+func truncName(name string, budget int, unicode bool) string {
+	if budget <= 0 {
+		return ""
+	}
+	if dispWidth(name) <= budget {
+		return name
+	}
+	ell := "..."
+	if unicode {
+		ell = "…"
+	}
+	return runewidth.Truncate(name, budget, ell)
+}
+
+// layout fits the live line to width. It gives the bar a sensible cell count and
+// truncates name so spinner + name + bar + readout (pct/speed/eta) never exceeds
+// the terminal width — fixing both long-name and narrow-terminal overflow.
+// Returns the (possibly truncated) name and the bar cell count. The fixed term
+// mirrors the Update line format: spinner(1) + space(1) + "  ["(3) + "]  "(3)
+// + pct + "  "(2) + "  eta "(6) + speed + eta.
+func layout(name string, width, pctLen, speedLen, etaLen int, unicode bool) (string, int) {
+	const (
+		margin  = 1 // leave one cell so the line never touches the right edge
+		minName = 8
+		minBar  = 6
+	)
+	fixed := 1 + 1 + 3 + 3 + pctLen + 2 + speedLen + 6 + etaLen
+	avail := width - margin - fixed
+	if avail < 0 {
+		avail = 0
+	}
+	bar := barWidth(width)
+	if bar > avail {
+		bar = avail
+	}
+	nameBudget := avail - bar
+	// On a tight line, trade a little bar width back to the name so the file
+	// stays identifiable rather than vanishing entirely.
+	if nameBudget < minName && bar > minBar {
+		give := minName - nameBudget
+		if give > bar-minBar {
+			give = bar - minBar
+		}
+		bar -= give
+		nameBudget += give
+	}
+	return truncName(name, nameBudget, unicode), bar
 }
 
 // pct returns an integer percentage clamped to [0,100].

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func fixedClock() func() time.Time {
@@ -37,15 +39,13 @@ func TestFitSparklineBudget(t *testing.T) {
 
 // The matrix theme's live line (the only one with a sparkline) must never exceed
 // the terminal width — a wrapped line breaks the \r redraw and floods stacked bars.
+// Since v0.7 the layout budget also keeps narrow (sub-80) terminals within width.
 func TestMatrixLineNeverExceedsWidth(t *testing.T) {
 	mtx, ok := ByName("matrix")
 	if !ok {
 		t.Fatal("no matrix theme")
 	}
-	// Realistic terminal widths: the sparkline must stay budgeted so the line
-	// never wraps. (Sub-80 widths can still overflow on the fixed chrome alone —
-	// a separate, pre-existing, all-theme concern, out of scope here.)
-	for _, width := range []int{80, 100, 116, 160} {
+	for _, width := range []int{40, 50, 60, 72, 80, 100, 116, 160} {
 		var buf bytes.Buffer
 		caps := Capabilities{TTY: true, Color: true, Unicode: true, Width: width}
 		s := newSink(&buf, mtx, caps, fixedClock(), "yt-dlp_linux", "")
@@ -60,8 +60,40 @@ func TestMatrixLineNeverExceedsWidth(t *testing.T) {
 			line = line[i+1:]
 		}
 		plain := stripANSI(line) // drops the trailing \x1b[K too
-		if w := len([]rune(plain)); w > width {
+		if w := runewidth.StringWidth(plain); w > width {
 			t.Fatalf("width %d: matrix line is %d cols: %q", width, w, plain)
+		}
+	}
+}
+
+// A long or wide (CJK) filename must be truncated so the live line still fits the
+// terminal width across themes and widths — never overflowing the right edge.
+func TestLiveLineTruncatesLongAndWideNames(t *testing.T) {
+	cases := []struct {
+		name      string
+		wantTrunc bool // true if the name is long enough to require an ellipsis
+	}{
+		{strings.Repeat("a", 200) + ".bin", true},
+		{strings.Repeat("世", 80) + ".bin", true}, // each ideograph is 2 columns
+		{"short.bin", false},
+	}
+	for _, theme := range []string{"catppuccin", "matrix"} {
+		th, _ := ByName(theme)
+		for _, tc := range cases {
+			for _, width := range []int{40, 60, 80, 120} {
+				var buf bytes.Buffer
+				caps := Capabilities{TTY: true, Color: false, Unicode: true, Width: width}
+				s := newSink(&buf, th, caps, fixedClock(), tc.name, "")
+				s.Update(50, 100)
+				line := strings.TrimPrefix(buf.String(), "\r")
+				line = strings.ReplaceAll(line, "\x1b[K", "")
+				if w := runewidth.StringWidth(line); w > width {
+					t.Fatalf("%s w=%d name=%q: line %d cols: %q", theme, width, tc.name, w, line)
+				}
+				if tc.wantTrunc && !strings.Contains(line, "…") {
+					t.Fatalf("%s w=%d: expected truncated name with ellipsis: %q", theme, width, line)
+				}
+			}
 		}
 	}
 }

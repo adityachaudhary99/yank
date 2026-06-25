@@ -87,21 +87,21 @@ func (s *sink) Update(done, total int64) {
 	}
 
 	pal := s.theme.Palette
-	bw := barWidth(s.caps.Width)
-	spin := paint(pal.Accent, g.Spinner[s.frame], s.caps)
-	bar := s.bar(done, total, bw)
 	pctPlain := fmt.Sprintf("%d%%", pct(done, total))
-	pctStr := paint(pal.Accent, pctPlain, s.caps)
 	speedStr := humanBytes(int64(speed)) + "/s"
 	etaPlain := etaStr(done, total, speed)
+	// Fit name + bar to the terminal width so the base line never wraps (a wrapped
+	// line breaks the \r + erase-to-EOL redraw and floods stacked bars down screen).
+	name, bw := layout(s.name, s.caps.Width, len(pctPlain), len(speedStr), len(etaPlain), s.caps.Unicode)
+	spin := paint(pal.Accent, g.Spinner[s.frame], s.caps)
+	bar := s.bar(done, total, bw)
+	pctStr := paint(pal.Accent, pctPlain, s.caps)
 
-	line := fmt.Sprintf("\r%s %s  [%s]  %s  %s", spin, s.name, bar, pctStr, speedStr)
+	line := fmt.Sprintf("\r%s %s  [%s]  %s  %s", spin, name, bar, pctStr, speedStr)
 	if s.theme.Sparkline && s.caps.Unicode && len(s.speeds) > 1 {
-		// Budget the sparkline to the columns left after everything else, so the
-		// live line never exceeds the terminal width. A wrapped line breaks the
-		// \r + erase-to-EOL redraw: erase only clears the cursor's row, so the
-		// wrapped remainder lingers and the bar floods stacked copies down screen.
-		if spk := fitSparkline(s.speeds, s.caps.Width, len(s.name), bw, len(pctPlain), len(speedStr), len(etaPlain)); len(spk) > 1 {
+		// Budget the sparkline to the columns left after everything else (name is
+		// already display-width-correct via layout), so the line still fits.
+		if spk := fitSparkline(s.speeds, s.caps.Width, dispWidth(name), bw, len(pctPlain), len(speedStr), len(etaPlain)); len(spk) > 1 {
 			line += "  " + paint(pal.Dim, sparkline(spk), s.caps)
 		}
 	}
