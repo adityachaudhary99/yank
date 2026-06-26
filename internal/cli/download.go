@@ -402,6 +402,21 @@ func checksumTargetName(raw, output string) string {
 	return ""
 }
 
+// dispatchDir is the directory a dispatched backend writes into, given -o/-d:
+// the directory of the resolved -o path when set, else -d. Returns "" for the
+// current directory (nothing to create).
+func dispatchDir(output, dir string) string {
+	if p := resolvedDispatchPath(output, dir); p != "" {
+		if d := filepath.Dir(p); d != "." && d != "" {
+			return d
+		}
+	}
+	if dir != "" && dir != "." {
+		return dir
+	}
+	return ""
+}
+
 // resolvedDispatchPath is the file a dispatched backend writes given -o/-d, or ""
 // when no -o was set (auto-named results are not knowable up front).
 func resolvedDispatchPath(output, dir string) string {
@@ -459,6 +474,14 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		// Confirm the tool actually landed (e.g. --print prints but installs nothing).
 		if _, lookErr2 := install.LookPath(b.Tool()); lookErr2 != nil {
 			return fmt.Errorf("%s requires %q which is still not installed: %w", src.Type, b.Tool(), ErrMissingBackend)
+		}
+	}
+
+	// Create the destination directory if it's missing (-d / a -o path), so a
+	// dispatched backend doesn't fail on a non-existent directory.
+	if dir := dispatchDir(f.output, f.dir); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("creating output directory %s: %w", dir, err)
 		}
 	}
 

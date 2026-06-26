@@ -86,6 +86,11 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 	if out == "" {
 		out = filepath.Join(opt.OutputDir, ResolveFilename(opt.URL, meta.Filename))
 	}
+	if dir := filepath.Dir(out); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("creating output directory %s: %w", dir, err)
+		}
+	}
 	if !opt.Force {
 		if _, err := os.Stat(out); err == nil {
 			return nil, fmt.Errorf("%s already exists — use --force to overwrite (interrupted downloads resume automatically)", out)
