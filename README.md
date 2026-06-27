@@ -94,6 +94,8 @@ yank [flags] <url>...
       --timeout <dur>      abort if a transfer stalls (no data) this long, e.g. 30s
       --insecure           skip TLS verification (native + dispatched backends)
       --color <when>       colorize output: auto|always|never (honors NO_COLOR/FORCE_COLOR)
+      --plain              line-oriented output: no progress bar, color, or animation
+      --accessible         plain, screen-reader-friendly output (also via ACCESSIBLE env)
   -v, --verbose            explain the routing decision (backend, target, argv) on stderr
 ```
 
@@ -145,6 +147,32 @@ yank --json --backend rclone -o data.csv "https://storage.example.com/data.csv" 
 yank --quiet --backend git -o ./cli https://github.com/cli/cli
 ```
 
+## Passing flags to the underlying tool
+
+yank wraps specialist tools — and it never gets in their way. Anything after a
+`--` separator is forwarded **verbatim** to the tool yank runs, so every native
+option stays reachable:
+
+```sh
+# yt-dlp: choose a format and pull cookies from your browser
+yank 'https://youtu.be/ID' -- -f 'bestvideo+bestaudio' --cookies-from-browser firefox
+
+# aria2c: tune a torrent
+yank 'magnet:?xt=urn:btih:...' -- --bt-max-peers=100 --seed-ratio=0.0
+
+# git: clone a single branch with submodules
+yank https://github.com/org/repo -- --branch dev --recurse-submodules
+
+# curl on a plain URL — force the curl backend, then pass curl's own flags
+yank https://host/f.bin --backend curl -- --retry 9 --compressed
+```
+
+The common cross-tool options are already **mapped for you**, so you rarely need
+`--`: `--insecure`, `--limit-rate`, `--cookies`, `--netrc`, and `-o`/`-d` each
+translate to the backend's equivalent flag. Not sure what will run? Add
+`--dry-run` (or `-v`) and yank prints the exact command — including your
+passthrough args — before executing anything.
+
 ## Backend tools
 
 The native engine needs nothing. Dispatched sources need the matching tool installed. Check what you have:
@@ -187,7 +215,16 @@ yank config set connections 16   # change one (saved to config.toml)
 
 Precedence: **command-line flags > `YANK_*` env vars > config file > built-in defaults.**
 
-Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = "~/Downloads"`).
+Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = "~/Downloads"`). A `-d`/`-o` directory that doesn't exist yet is created for you.
+
+## Accessibility
+
+yank should be readable for everyone, in every environment:
+
+- **`--plain`** prints line-oriented, append-only progress — no progress bar, color, spinner, or cursor moves — so it reads cleanly in logs, pipes, and to screen readers.
+- **`--accessible`** (or the `ACCESSIBLE` environment variable) turns on plain mode for assistive tech. yank also switches to plain automatically when output isn't a terminal, in CI (`CI` set), or on a dumb terminal (`TERM=dumb`).
+- **`NO_COLOR`** is honored (any non-empty value disables color); **`FORCE_COLOR`** re-enables it through a pipe. `--color auto|always|never` and `--ascii` (pure 7-bit) give explicit control.
+- Status is conveyed by **word and symbol, never color alone**, and the live line is truncated to your terminal width — wide (CJK) characters measured correctly — so it never wraps.
 
 ## Exit codes
 
@@ -227,6 +264,10 @@ Paths in `dir`, `-d`, and `-o` may use `~` for your home directory (e.g. `dir = 
   flag struct partitioned by concern (no behavior change).
 - **v0.6.4 (shipped)** — fix: the matrix theme's progress bar no longer floods
   the terminal (its sparkline is budgeted to the line width).
+- **v0.7.0 (shipped)** — accessibility: `--plain` / `--accessible` (and
+  `ACCESSIBLE` / `CI` / `TERM=dumb`) line-oriented output, a width-correct live
+  line (CJK-aware, no overflow on narrow terminals), passthrough documented as a
+  first-class feature, and auto-created `-d`/`-o` directories.
 
 ## License
 

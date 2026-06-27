@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-23
+
+Accessible ("Accessible") — readable output for screen readers, CI logs, and any
+terminal, plus the wrapper escape hatch documented at last.
+
+### Added
+- **`--plain`** — line-oriented, append-only progress: no progress bar, color,
+  spinner, or cursor moves. One labelled line per event (`done:` / `error:`),
+  pure ASCII, safe for logs and pipes.
+- **`--accessible`** and the **`ACCESSIBLE`** environment variable — turn on plain
+  mode for screen readers (mirrors `gh` / Charm `huh`). Plain mode is also
+  selected automatically in CI (`CI` set) and on a dumb terminal (`TERM=dumb`).
+- **Passthrough is now documented as a first-class feature** — anything after
+  `--` is forwarded verbatim to the wrapped tool (e.g. `yank URL -- -f bestaudio
+  --cookies-from-browser firefox`); `--dry-run`/`-v` preview the exact command.
+- A missing **`-d` / `-o` directory is created** (mkdir -p), for the native engine
+  and dispatched backends alike.
+
+### Fixed
+- **The live progress line never exceeds the terminal width.** A long filename
+  (any width) or the fixed chrome on a narrow (<80 col) terminal could overflow
+  and wrap, breaking the in-place redraw. The line now budgets its width — the
+  bar shrinks and the name truncates with an ellipsis — and measures display
+  width with East-Asian width rules, so CJK/wide filenames are counted as
+  rendered. This fixes the v0.6.4 issue at the root for every theme.
+
 ## [0.6.4] - 2026-06-18
 
 ### Fixed
@@ -282,6 +308,7 @@ First public release. One command that downloads from anywhere.
 - **Distribution** — cross-platform binaries (linux/darwin × amd64/arm64), a
   `.deb` package, and `checksums.txt`, built and published by goreleaser on tag.
 
+[0.7.0]: https://github.com/adityachaudhary99/yank/releases/tag/v0.7.0
 [0.6.4]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.4
 [0.6.3]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.3
 [0.6.2]: https://github.com/adityachaudhary99/yank/releases/tag/v0.6.2
