@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"os"
 	"os/exec"
 
 	"github.com/adityachaudhary99/yank/internal/backend"
@@ -23,10 +22,7 @@ func newDoctorCmd(f *downloadFlags) *cobra.Command {
 			if !ok {
 				theme = ui.Default()
 			}
-			caps := ui.Detect(ui.Env{
-				Getenv: os.Getenv, IsTTY: isTerminal(out), Width: terminalWidth(out),
-				Color: f.colorMode, ForceASCII: f.ascii,
-			})
+			caps := ui.Detect(uiEnv(out, f))
 			g := theme.Glyphs(caps)
 			mgr := resolveAndRememberManager(f)
 

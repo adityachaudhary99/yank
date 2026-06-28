@@ -224,7 +224,7 @@ yank should be readable for everyone, in every environment:
 - **`--plain`** prints line-oriented, append-only progress — no progress bar, color, spinner, or cursor moves — so it reads cleanly in logs, pipes, and to screen readers.
 - **`--accessible`** (or the `ACCESSIBLE` environment variable) turns on plain mode for assistive tech. yank also switches to plain automatically when output isn't a terminal, in CI (`CI` set), or on a dumb terminal (`TERM=dumb`).
 - **`NO_COLOR`** is honored (any non-empty value disables color); **`FORCE_COLOR`** re-enables it through a pipe. `--color auto|always|never` and `--ascii` (pure 7-bit) give explicit control.
-- Status is conveyed by **word and symbol, never color alone**, and the live line is truncated to your terminal width — wide (CJK) characters measured correctly — so it never wraps.
+- Status is conveyed by **word and symbol, never color alone**, and the live line is fit to your terminal width — the bar shrinks and the filename truncates, with wide (CJK) characters measured correctly — so it stays on one line.
 
 ## Exit codes
 

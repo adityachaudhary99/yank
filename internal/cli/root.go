@@ -79,14 +79,14 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 		defaultColor = "never"
 	}
 	pf.StringVar(&f.colorMode, "color", defaultColor, "colorize output: auto|always|never")
-	pf.BoolVar(&f.plain, "plain", false, "line-oriented output: no progress bar, color, or animation")
-	pf.BoolVar(&f.accessible, "accessible", false, "accessibility mode: plain, screen-reader-friendly output (also via ACCESSIBLE / CI / TERM=dumb)")
 
 	// Presentation + install flags are persistent so subcommands (doctor,
 	// install-deps) and the download path share them.
 	gf := root.PersistentFlags()
 	gf.StringVar(&f.theme, "theme", cfg.Theme, "progress UI theme: catppuccin|gruvbox|tokyonight|matrix")
 	gf.BoolVar(&f.ascii, "ascii", false, "force plain ASCII output (no color or unicode)")
+	gf.BoolVar(&f.plain, "plain", false, "line-oriented output: no progress bar, color, or animation")
+	gf.BoolVar(&f.accessible, "accessible", false, "accessibility mode: plain, screen-reader-friendly output (also via ACCESSIBLE / CI / TERM=dumb)")
 	gf.BoolVarP(&f.yes, "yes", "y", false, "auto-install missing backends without prompting")
 	gf.BoolVar(&f.printDeps, "print", false, "only print install commands; never run them")
 	gf.StringVar(&f.pm, "pm", "", "package manager to use (apt|dnf|pacman|zypper|apk|brew)")

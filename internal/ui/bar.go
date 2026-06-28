@@ -106,11 +106,13 @@ func truncName(name string, budget int, unicode bool) string {
 }
 
 // layout fits the live line to width. It gives the bar a sensible cell count and
-// truncates name so spinner + name + bar + readout (pct/speed/eta) never exceeds
-// the terminal width — fixing both long-name and narrow-terminal overflow.
+// truncates name so spinner + name + bar + readout (pct/speed/eta) stays within
+// the terminal width — fixing both long-name and narrow-terminal overflow. (On a
+// pathologically narrow terminal the fixed readout alone may not fit; the bar
+// then drops to zero and the name to empty, which is the best we can do.)
 // Returns the (possibly truncated) name and the bar cell count. The fixed term
 // mirrors the Update line format: spinner(1) + space(1) + "  ["(3) + "]  "(3)
-// + pct + "  "(2) + "  eta "(6) + speed + eta.
+// + pct + "  "(2) + speed + "  eta "(6) + eta.
 func layout(name string, width, pctLen, speedLen, etaLen int, unicode bool) (string, int) {
 	const (
 		margin  = 1 // leave one cell so the line never touches the right edge

@@ -131,7 +131,12 @@ func fitSparkline(speeds []float64, width, nameLen, barW, pctLen, speedLen, etaL
 }
 
 // bar renders a themed, colored progress bar: filled run + optional head + track.
+// A width <= 0 (layout gave the bar no room on a narrow terminal) renders nothing,
+// so the line stays within the terminal width.
 func (s *sink) bar(done, total int64, width int) string {
+	if width <= 0 {
+		return ""
+	}
 	g := s.theme.Glyphs(s.caps)
 	pal := s.theme.Palette
 	filled := barCells(done, total, width)

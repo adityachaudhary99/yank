@@ -227,33 +227,49 @@ func downloadConcurrent(ctx context.Context, cmd *cobra.Command, f *downloadFlag
 	}
 }
 
-// concurrentSinks builds one progress.Sink per URL for the concurrent path. On a
-// themed TTY they share a Stack (one aggregate line); --json gives each its own
-// NDJSON sink; --quiet / non-TTY are silent.
+// concurrentSinks builds one progress.Sink per URL for the concurrent path:
+// --json gives each its own NDJSON sink; --quiet is silent; plain mode (a11y /
+// CI / --plain) gives each its own line-oriented sink (no aggregate animation);
+// a non-plain non-TTY is silent; a themed TTY shares one aggregate Stack.
 func concurrentSinks(cmd *cobra.Command, f *downloadFlags, urls []string) ([]progress.Sink, *ui.Stack) {
 	sinks := make([]progress.Sink, len(urls))
-	switch {
-	case f.jsonOut:
+	out := cmd.OutOrStdout()
+	if f.jsonOut {
 		for i, u := range urls {
-			sinks[i] = progress.NewJSON(cmd.OutOrStdout(), displayName(u, ""))
+			sinks[i] = progress.NewJSON(out, displayName(u, ""))
 		}
 		return sinks, nil
-	case f.quiet || !isTerminal(cmd.OutOrStdout()):
+	}
+	if f.quiet {
+		for i := range sinks {
+			sinks[i] = progress.NewSilent()
+		}
+		return sinks, nil
+	}
+	theme, ok := ui.ByName(f.theme)
+	if !ok {
+		theme = ui.Default()
+	}
+	caps := ui.Detect(uiEnv(out, f))
+	names := make([]string, len(urls))
+	for i, u := range urls {
+		names[i] = displayName(u, "")
+	}
+	switch {
+	case caps.Plain:
+		// No aggregate animation in plain mode: each URL gets its own
+		// line-oriented sink, which works on a TTY and in CI / non-TTY logs alike.
+		for i := range urls {
+			sinks[i] = ui.NewSink(out, theme, caps, names[i], "")
+		}
+		return sinks, nil
+	case !caps.TTY:
 		for i := range sinks {
 			sinks[i] = progress.NewSilent()
 		}
 		return sinks, nil
 	default:
-		theme, ok := ui.ByName(f.theme)
-		if !ok {
-			theme = ui.Default()
-		}
-		caps := ui.Detect(uiEnv(cmd.OutOrStdout(), f))
-		names := make([]string, len(urls))
-		for i, u := range urls {
-			names[i] = displayName(u, "")
-		}
-		return ui.New(cmd.OutOrStdout(), theme, caps, names)
+		return ui.New(out, theme, caps, names)
 	}
 }
 

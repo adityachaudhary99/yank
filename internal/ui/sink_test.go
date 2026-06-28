@@ -98,6 +98,19 @@ func TestLiveLineTruncatesLongAndWideNames(t *testing.T) {
 	}
 }
 
+// When layout gives the bar no room (narrow terminal), bar() renders nothing
+// rather than falling back to barCells' default 10 cells and overflowing.
+func TestBarZeroWidthRendersNothing(t *testing.T) {
+	caps := Capabilities{TTY: true, Color: false, Unicode: true, Width: 80}
+	s := newSink(&bytes.Buffer{}, Default(), caps, fixedClock(), "f", "")
+	if got := s.bar(50, 100, 0); got != "" {
+		t.Fatalf("bar(width=0) = %q, want empty", got)
+	}
+	if got := s.bar(50, 100, -3); got != "" {
+		t.Fatalf("bar(width<0) = %q, want empty", got)
+	}
+}
+
 func TestSinkASCIINoColor(t *testing.T) {
 	var buf bytes.Buffer
 	caps := Capabilities{TTY: true, Color: false, Unicode: false, Width: 60}

@@ -23,12 +23,12 @@ terminal, plus the wrapper escape hatch documented at last.
   and dispatched backends alike.
 
 ### Fixed
-- **The live progress line never exceeds the terminal width.** A long filename
-  (any width) or the fixed chrome on a narrow (<80 col) terminal could overflow
-  and wrap, breaking the in-place redraw. The line now budgets its width — the
-  bar shrinks and the name truncates with an ellipsis — and measures display
-  width with East-Asian width rules, so CJK/wide filenames are counted as
-  rendered. This fixes the v0.6.4 issue at the root for every theme.
+- **The live progress line is fit to the terminal width.** A long filename, or
+  the fixed chrome on a narrow (<80 col) terminal, could overflow and wrap,
+  breaking the in-place redraw. The line now budgets its width — the bar shrinks
+  and the name truncates with an ellipsis — and measures display width with
+  East-Asian width rules, so CJK/wide filenames are counted as rendered. This
+  fixes the v0.6.4 issue at the root for every theme.
 
 ## [0.6.4] - 2026-06-18
 
