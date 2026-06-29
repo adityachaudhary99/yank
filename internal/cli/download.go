@@ -60,6 +60,7 @@ type transferFlags struct {
 	cookiesFile  string
 	netrc        bool
 	mirrors      []string
+	execCmd      string
 }
 
 // presentFlags control how output looks and how much is explained.
@@ -514,10 +515,19 @@ func dispatchWithInstall(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		reporter: reporter,
 		reg:      reg,
 	}
-	return runDispatch(ctx, deps, src, route.Request{
+	if err := runDispatch(ctx, deps, src, route.Request{
 		OutputDir: f.dir, Output: f.output, Insecure: f.insecure, RateLimit: f.limitRate,
 		Cookies: f.cookiesFile, Netrc: f.netrc, Passthrough: passthrough,
-	}, spec, f.output, f.dir)
+	}, spec, f.output, f.dir); err != nil {
+		return err
+	}
+	// Run the --exec hook on the resolved output path. Dispatched backends only
+	// expose a knowable path when -o was given (auto-named results aren't), so
+	// the hook is skipped otherwise (runExecHook no-ops on an empty path).
+	if hookErr := runExecHook(ctx, f.execCmd, resolvedDispatchPath(f.output, f.dir), cmd.ErrOrStderr()); hookErr != nil {
+		cmd.PrintErrln("yank: --exec hook failed:", hookErr)
+	}
+	return nil
 }
 
 type runDispatchDeps struct {
@@ -608,14 +618,20 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if f.noParallel {
 		conns = 1
 	}
-	_, err = engine.Download(ctx, engine.Options{
+	res, err := engine.Download(ctx, engine.Options{
 		URL: raw, OutputPath: f.output, OutputDir: f.dir,
 		Connections: conns, Retries: f.retries, Force: f.force,
 		Fresh:   f.fresh || f.noResume,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
 		StallTimeout: f.timeout, RateLimit: rate,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if hookErr := runExecHook(ctx, f.execCmd, res.Path, cmd.ErrOrStderr()); hookErr != nil {
+		cmd.PrintErrln("yank: --exec hook failed:", hookErr)
+	}
+	return nil
 }
 
 // newHTTPClient builds the native HTTP client. It applies --insecure / --timeout
