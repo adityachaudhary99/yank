@@ -88,6 +88,7 @@ yank [flags] <url>...
       --cookies <file>     send a Netscape cookie jar with requests
       --netrc              use ~/.netrc (or $NETRC) for host credentials
       --mirror <url>       alternate URL for the same file, tried on failure (repeatable)
+      --exec <cmd>         run a command after each download ({} = the file path)
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
       --limit-rate <rate>  cap the download rate, e.g. 500k or 1M
@@ -135,6 +136,10 @@ yank -i urls.txt -d ./downloads -j 4
 
 # stream straight into a pipe (no temp file)
 yank https://example.com/archive.tar.gz -o - | tar xz
+
+# run a command on each file as it finishes ({} is the path; appended if omitted)
+yank https://example.com/src.tar.gz --exec 'tar xzf {}'
+yank -i urls.txt -d ./pkgs --exec 'sha256sum'
 
 # one file with fallback mirrors — tried in order until one works
 yank https://main.example/app.tar.gz --mirror https://mirror1/app.tar.gz --mirror https://mirror2/app.tar.gz

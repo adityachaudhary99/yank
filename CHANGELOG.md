@@ -4,15 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - 2026-06-23
+## [0.7.0] - 2026-07-05
 
-Accessible ("Accessible") — readable output for screen readers, CI logs, and any
-terminal, plus the wrapper escape hatch documented at last.
+A larger release: accessible output for screen readers / CI / any terminal, a
+post-download hook, and the wrapper escape hatch documented at last.
 
 ### Added
 - **`--plain`** — line-oriented, append-only progress: no progress bar, color,
   spinner, or cursor moves. One labelled line per event (`done:` / `error:`),
   pure ASCII, safe for logs and pipes.
+- **`--exec <cmd>`** — run a command after each download (`yank URL --exec 'tar
+  xzf {}'`). `{}` is replaced with the file path (appended if omitted); the
+  command runs directly with quote handling (no shell), and a non-zero exit is a
+  warning, not a failure. Works for the native engine and dispatched backends.
 - **`--accessible`** and the **`ACCESSIBLE`** environment variable — turn on plain
   mode for screen readers (mirrors `gh` / Charm `huh`). Plain mode is also
   selected automatically in CI (`CI` set) and on a dumb terminal (`TERM=dumb`).
