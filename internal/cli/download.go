@@ -105,8 +105,8 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
-	if len(urls) > 1 && f.output != "" && f.output != "-" {
-		return usageErrf("-o sets one filename; use -d <dir> for multiple URLs")
+	if len(urls) > 1 && f.output != "" && f.output != "-" && !isOutputTemplate(f.output) {
+		return usageErrf("-o sets one filename; use -d <dir>, or an -o template like '%%(name)s.%%(ext)s', for multiple URLs")
 	}
 	if f.output == "-" && len(urls) > 1 {
 		return usageErrf("-o - (stdout) is only valid with a single URL")
@@ -149,6 +149,20 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 // progress sink (used by the concurrent path's shared Stack); when set, the
 // dispatch path runs quietly so concurrent tool output doesn't garble.
 func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw string, passthrough []string, sink progress.Sink) error {
+	// Expand an -o name template (e.g. '%(name)s.%(ext)s') against this URL, so a
+	// batch download names each file independently. The result is folded into -d
+	// and dir is cleared (the joined path is the final output for native and
+	// dispatch alike).
+	if isOutputTemplate(f.output) {
+		name, terr := expandOutputTemplate(f.output, raw)
+		if terr != nil {
+			return usageErr(terr)
+		}
+		ef := *f
+		ef.output = filepath.Join(f.dir, name)
+		ef.dir = ""
+		f = &ef
+	}
 	src := classify.Classify(raw)
 	if f.backend != "" && f.backend != "auto" {
 		src.Backend = f.backend
