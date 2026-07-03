@@ -68,7 +68,7 @@ Not sure what `yank` will do? Add `--dry-run` to see the plan without downloadin
 yank [flags] <url>...
 
 # common flags
-  -o, --output <path>      output file path (- for stdout)
+  -o, --output <path>      output file path (- for stdout, or a %(name)s template)
   -i, --input <file>       read URLs from a file, one per line (- for stdin)
   -d, --dir <dir>          output directory (default ".")
   -x, --connections <n>    parallel connections per download (default 8)
@@ -141,6 +141,9 @@ yank https://example.com/archive.tar.gz -o - | tar xz
 yank https://example.com/src.tar.gz --exec 'tar xzf {}'
 yank -i urls.txt -d ./pkgs --exec 'sha256sum'
 
+# name each file from a template (valid with many URLs; %(name)s/%(ext)s/%(host)s)
+yank -i urls.txt -d ./out -o '%(host)s_%(name)s.%(ext)s'
+
 # one file with fallback mirrors — tried in order until one works
 yank https://main.example/app.tar.gz --mirror https://mirror1/app.tar.gz --mirror https://mirror2/app.tar.gz
 
@@ -177,6 +180,12 @@ The common cross-tool options are already **mapped for you**, so you rarely need
 translate to the backend's equivalent flag. Not sure what will run? Add
 `--dry-run` (or `-v`) and yank prints the exact command — including your
 passthrough args — before executing anything.
+
+**Scope:** `--` passes the tool's **flags**, on the one verb yank runs for that
+source (`git clone`, `rclone copyurl`, yt-dlp/aria2c download, `curl` GET). It
+does not switch the tool to a different *sub-command* — yank is a download
+aggregator, not a general front-end, so `git pull`, `rclone sync`, or aria2c's
+RPC daemon aren't reachable through it.
 
 ## Backend tools
 

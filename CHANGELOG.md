@@ -17,6 +17,9 @@ post-download hook, and the wrapper escape hatch documented at last.
   xzf {}'`). `{}` is replaced with the file path (appended if omitted); the
   command runs directly with quote handling (no shell), and a non-zero exit is a
   warning, not a failure. Works for the native engine and dispatched backends.
+- **Output-name templating** — `-o` accepts a template (`%(name)s`, `%(ext)s`,
+  `%(filename)s`, `%(host)s`) expanded per URL, so it's valid with multiple URLs:
+  `yank -i urls.txt -d out -o '%(host)s_%(name)s.%(ext)s'`.
 - **`--accessible`** and the **`ACCESSIBLE`** environment variable — turn on plain
   mode for screen readers (mirrors `gh` / Charm `huh`). Plain mode is also
   selected automatically in CI (`CI` set) and on a dumb terminal (`TERM=dumb`).
