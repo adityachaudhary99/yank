@@ -60,6 +60,7 @@ type transferFlags struct {
 	netrc        bool
 	mirrors      []string
 	execCmd      string
+	rangeSpec    string
 }
 
 // presentFlags control how output looks and how much is explained.
@@ -626,6 +627,14 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 	if err != nil {
 		return usageErr(err)
 	}
+	if f.rangeSpec != "" {
+		if !validRangeSpec(f.rangeSpec) {
+			return usageErrf("invalid --range %q (use start-end, start-, or -count, e.g. 0-1023)", f.rangeSpec)
+		}
+		if f.output == "-" {
+			return usageErrf("--range is not supported with -o - (stdout)")
+		}
+	}
 	if f.output == "-" { // stream to stdout (single stream, no resume/checksum)
 		if sum != "" {
 			return usageErrf("--checksum/--checksums is not supported with -o - (streaming to stdout)")
@@ -646,7 +655,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		Connections: conns, Retries: f.retries, Force: f.force,
 		Fresh:   f.fresh || f.noResume,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
-		StallTimeout: f.timeout, RateLimit: rate,
+		StallTimeout: f.timeout, RateLimit: rate, Range: f.rangeSpec,
 	})
 	if err != nil {
 		return err
@@ -811,6 +820,29 @@ func printVerbose(cmd *cobra.Command, f *downloadFlags, src classify.Source, pas
 			fmt.Fprintf(w, "yank: command %v\n", argv)
 		}
 	}
+}
+
+// validRangeSpec reports whether s is an HTTP byte-range spec yank accepts:
+// "start-end", "start-", or "-count" — at least one side must be a number.
+func validRangeSpec(s string) bool {
+	i := strings.IndexByte(s, '-')
+	if i < 0 {
+		return false
+	}
+	a, b := s[:i], s[i+1:]
+	if a == "" && b == "" {
+		return false
+	}
+	return isAllDigits(a) && isAllDigits(b)
+}
+
+func isAllDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // splitPassthrough separates URLs from args after a "--" terminator.

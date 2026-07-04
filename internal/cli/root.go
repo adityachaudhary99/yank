@@ -71,6 +71,7 @@ func newRootCmdWithFlags(b BuildInfo, f *downloadFlags) *cobra.Command {
 	pf.BoolVar(&f.netrc, "netrc", false, "use ~/.netrc (or $NETRC) for host credentials")
 	pf.StringArrayVar(&f.mirrors, "mirror", nil, "alternate URL for the same file; tried if the primary fails (repeatable)")
 	pf.StringVar(&f.execCmd, "exec", "", "run a command after each download; {} is the file path (e.g. --exec 'tar xzf {}')")
+	pf.StringVar(&f.rangeSpec, "range", "", "download only a byte range: start-end, start-, or -count (e.g. 0-1023)")
 	pf.BoolVarP(&f.verbose, "verbose", "v", false, "explain routing: backend chosen, probe result, dispatched command")
 	_ = pf.MarkHidden("no-resume")
 	// --color is tri-state; its default honors the config "color" preference

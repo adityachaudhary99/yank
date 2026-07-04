@@ -30,6 +30,7 @@ type Options struct {
 	RateLimit    int64         // max bytes/sec across the whole transfer; 0 = unlimited
 	Fresh        bool          // ignore any partial .part/state and restart from 0
 	Stdout       io.Writer     // when set, stream the body here (no file/resume/parallel)
+	Range        string        // HTTP byte-range spec (e.g. "0-1023"); single-stream, no resume
 }
 
 // Result reports what was downloaded.
@@ -97,11 +98,14 @@ func Download(ctx context.Context, opt Options) (*Result, error) {
 		}
 	}
 
-	useParallel := opt.Connections > 1 && meta.SupportsRanges && meta.Size > minParallelSize
+	useParallel := opt.Connections > 1 && meta.SupportsRanges && meta.Size > minParallelSize && opt.Range == ""
 	var n int64
-	if useParallel {
+	switch {
+	case opt.Range != "":
+		n, err = downloadRange(ctx, opt, out) // explicit byte range: single-stream, no resume
+	case useParallel:
 		n, err = downloadParallel(ctx, opt, meta, out)
-	} else {
+	default:
 		n, err = downloadSingle(ctx, opt, meta, out)
 	}
 	if err != nil {
@@ -264,6 +268,71 @@ func downloadSingle(ctx context.Context, opt Options, meta *Meta, out string) (i
 		return 0, err
 	}
 	clearState(out)
+	return written, nil
+}
+
+// downloadRange fetches an explicit byte range (opt.Range, e.g. "0-1023") to out
+// in a single stream. There is no resume or parallelism — the range IS the
+// content — so each attempt rewrites the file from the start; a server that
+// ignores the range (returns 200) is a hard error rather than a full download.
+func downloadRange(ctx context.Context, opt Options, out string) (int64, error) {
+	var lim *throttle
+	if opt.RateLimit > 0 {
+		lim = newThrottle(opt.RateLimit, time.Now)
+	}
+	f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	var written int64
+	err = withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
+		attemptCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		req, rerr := http.NewRequestWithContext(attemptCtx, http.MethodGet, opt.URL, nil)
+		if rerr != nil {
+			return rerr
+		}
+		applyHeaders(req, opt.Headers)
+		req.Header.Set("Range", "bytes="+opt.Range)
+		resp, rerr := opt.Client.Do(req)
+		if rerr != nil {
+			return rerr
+		}
+		defer resp.Body.Close()
+		switch {
+		case resp.StatusCode == http.StatusOK:
+			return Permanent(fmt.Errorf("server ignored --range %q (returned the whole file); it does not support range requests", opt.Range))
+		case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
+			return Permanent(fmt.Errorf("--range %q is not satisfiable for this file (HTTP 416)", opt.Range))
+		case resp.StatusCode != http.StatusPartialContent:
+			e := &StatusError{Code: resp.StatusCode, Status: resp.Status}
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				return Permanent(e)
+			}
+			return e
+		}
+		if _, serr := f.Seek(0, io.SeekStart); serr != nil { // retry rewrites from the start
+			return serr
+		}
+		if terr := f.Truncate(0); terr != nil {
+			return terr
+		}
+		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
+		defer body.Stop()
+		var src io.Reader = body
+		if lim != nil {
+			src = &rateLimitedReader{r: body, t: lim, ctx: attemptCtx}
+		}
+		cw := &countingWriter{w: f, total: resp.ContentLength, sink: opt.Sink}
+		_, cerr := io.Copy(cw, src)
+		written = cw.n
+		return cerr
+	})
+	if err != nil {
+		return 0, err
+	}
 	return written, nil
 }
 
