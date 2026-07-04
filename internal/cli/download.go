@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -94,40 +93,44 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	// Expand ~ in path flags (config defaults are already expanded at load).
 	f.dir = config.ExpandPath(f.dir)
 	f.output = config.ExpandPath(f.output)
-	urls, passthrough := splitPassthrough(cmd, args)
-	if f.input != "" { // read more URLs from a file or stdin (one per line)
-		extra, err := inputURLs(cmd, f.input)
+	argURLs, passthrough := splitPassthrough(cmd, args)
+	targets := make([]inputEntry, 0, len(argURLs))
+	for _, u := range argURLs {
+		targets = append(targets, inputEntry{url: u})
+	}
+	if f.input != "" { // read more URLs (and optional per-URL options) from a file or stdin
+		entries, err := inputEntries(cmd, f.input)
 		if err != nil {
 			return usageErr(err)
 		}
-		urls = append(urls, extra...)
+		targets = append(targets, entries...)
 	}
-	if len(urls) == 0 {
+	if len(targets) == 0 {
 		return cmd.Help()
 	}
-	if len(urls) > 1 && f.output != "" && f.output != "-" && !isOutputTemplate(f.output) {
+	if len(targets) > 1 && f.output != "" && f.output != "-" && !isOutputTemplate(f.output) {
 		return usageErrf("-o sets one filename; use -d <dir>, or an -o template like '%%(name)s.%%(ext)s', for multiple URLs")
 	}
-	if f.output == "-" && len(urls) > 1 {
+	if f.output == "-" && len(targets) > 1 {
 		return usageErrf("-o - (stdout) is only valid with a single URL")
 	}
 	ctx := cmd.Context()
 	if len(f.mirrors) > 0 {
-		if len(urls) != 1 {
+		if len(targets) != 1 {
 			return usageErrf("--mirror is only valid with a single URL")
 		}
-		return downloadWithMirrors(ctx, cmd, f, urls[0], passthrough)
+		return downloadWithMirrors(ctx, cmd, f, targets[0], passthrough)
 	}
-	if f.jobs > 1 && len(urls) > 1 {
-		return downloadConcurrent(ctx, cmd, f, urls, passthrough)
+	if f.jobs > 1 && len(targets) > 1 {
+		return downloadConcurrent(ctx, cmd, f, targets, passthrough)
 	}
 	var failures int
 	var lastErr error
-	for _, raw := range urls {
-		if err := downloadOne(ctx, cmd, f, raw, passthrough, nil); err != nil {
+	for _, t := range targets {
+		if err := downloadOne(ctx, cmd, deriveTargetFlags(f, t), t.url, passthrough, nil); err != nil {
 			failures++
 			lastErr = err
-			if len(urls) > 1 { // in a batch, label each failure with its URL
+			if len(targets) > 1 { // in a batch, label each failure with its URL
 				cmd.PrintErrln("yank:", err)
 			}
 		}
@@ -135,12 +138,12 @@ func runDownload(cmd *cobra.Command, f *downloadFlags, args []string) error {
 	switch {
 	case failures == 0:
 		return nil
-	case failures < len(urls):
-		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(urls)))
-	case len(urls) == 1:
+	case failures < len(targets):
+		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(targets)))
+	case len(targets) == 1:
 		return lastErr // single URL: preserve its specific exit code
 	default:
-		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(urls)))
+		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(targets)))
 	}
 }
 
@@ -187,15 +190,17 @@ func downloadOne(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw 
 }
 
 // downloadWithMirrors tries the primary URL, then each --mirror in order, and
-// returns nil on the first success or the last error if all fail.
-func downloadWithMirrors(ctx context.Context, cmd *cobra.Command, f *downloadFlags, primary string, passthrough []string) error {
-	candidates := append([]string{primary}, f.mirrors...)
+// returns nil on the first success or the last error if all fail. Per-URL
+// options (from -i) apply to every candidate (they're the same file).
+func downloadWithMirrors(ctx context.Context, cmd *cobra.Command, f *downloadFlags, target inputEntry, passthrough []string) error {
+	ft := deriveTargetFlags(f, target)
+	candidates := append([]string{target.url}, f.mirrors...)
 	var lastErr error
 	for i, c := range candidates {
 		if i > 0 {
 			cmd.PrintErrln("yank: primary failed; trying mirror", c)
 		}
-		if err := downloadOne(ctx, cmd, f, c, passthrough, nil); err == nil {
+		if err := downloadOne(ctx, cmd, ft, c, passthrough, nil); err == nil {
 			return nil
 		} else {
 			lastErr = err
@@ -207,19 +212,23 @@ func downloadWithMirrors(ctx context.Context, cmd *cobra.Command, f *downloadFla
 // downloadConcurrent runs the URL list through a worker pool of f.jobs, sharing a
 // single themed Stack (aggregate progress) on a TTY, then prints a per-URL
 // summary and the standard partial/all-failed exit code.
-func downloadConcurrent(ctx context.Context, cmd *cobra.Command, f *downloadFlags, urls, passthrough []string) error {
+func downloadConcurrent(ctx context.Context, cmd *cobra.Command, f *downloadFlags, targets []inputEntry, passthrough []string) error {
+	urls := make([]string, len(targets))
+	for i, t := range targets {
+		urls[i] = t.url
+	}
 	sinks, stack := concurrentSinks(cmd, f, urls)
 	sem := make(chan struct{}, f.jobs)
 	var wg sync.WaitGroup
-	results := make([]error, len(urls))
-	for i, raw := range urls {
+	results := make([]error, len(targets))
+	for i, t := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, raw string) {
+		go func(i int, t inputEntry) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = downloadOne(ctx, cmd, f, raw, passthrough, sinks[i])
-		}(i, raw)
+			results[i] = downloadOne(ctx, cmd, deriveTargetFlags(f, t), t.url, passthrough, sinks[i])
+		}(i, t)
 	}
 	wg.Wait()
 	if stack != nil {
@@ -235,10 +244,10 @@ func downloadConcurrent(ctx context.Context, cmd *cobra.Command, f *downloadFlag
 	switch {
 	case failures == 0:
 		return nil
-	case failures < len(urls):
-		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(urls)))
+	case failures < len(targets):
+		return withCode(ExitPartial, fmt.Errorf("%d of %d downloads failed", failures, len(targets)))
 	default:
-		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(urls)))
+		return withCode(ExitGeneric, fmt.Errorf("all %d downloads failed", len(targets)))
 	}
 }
 
@@ -812,29 +821,16 @@ func splitPassthrough(cmd *cobra.Command, args []string) (urls, passthrough []st
 	return args, nil
 }
 
-// inputURLs reads URLs from --input: a local file, or "-" for stdin.
-func inputURLs(cmd *cobra.Command, src string) ([]string, error) {
+// inputEntries reads download targets from --input: a local file, or "-" for
+// stdin. Each entry is a URL plus optional indented per-URL options (see
+// parseInputEntries). A plain one-URL-per-line file still works unchanged.
+func inputEntries(cmd *cobra.Command, src string) ([]inputEntry, error) {
 	if src == "-" {
-		return readInputURLs(cmd.InOrStdin()), nil
+		return parseInputEntries(cmd.InOrStdin())
 	}
 	b, err := os.ReadFile(config.ExpandPath(src))
 	if err != nil {
 		return nil, err
 	}
-	return readInputURLs(bytes.NewReader(b)), nil
-}
-
-// readInputURLs parses one URL per line, trimming whitespace and skipping blank
-// lines and #-comments.
-func readInputURLs(r io.Reader) []string {
-	var urls []string
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		urls = append(urls, line)
-	}
-	return urls
+	return parseInputEntries(bytes.NewReader(b))
 }

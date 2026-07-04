@@ -8,20 +8,6 @@ import (
 	"testing"
 )
 
-func TestReadInputURLs(t *testing.T) {
-	in := "https://a/x\n\n# a comment\n  https://b/y  \nftp://c/z\n"
-	got := readInputURLs(strings.NewReader(in))
-	want := []string{"https://a/x", "https://b/y", "ftp://c/z"}
-	if len(got) != len(want) {
-		t.Fatalf("got %v want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got[%d]=%q want %q", i, got[i], want[i])
-		}
-	}
-}
-
 func TestInputFileDryRun(t *testing.T) {
 	dir := t.TempDir()
 	list := filepath.Join(dir, "urls.txt")
