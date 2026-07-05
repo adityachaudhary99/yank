@@ -281,7 +281,7 @@ func downloadRange(ctx context.Context, opt Options, out string) (int64, error) 
 	if opt.RateLimit > 0 {
 		lim = newThrottle(opt.RateLimit, time.Now)
 	}
-	f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return 0, err
 	}
@@ -289,6 +289,8 @@ func downloadRange(ctx context.Context, opt Options, out string) (int64, error) 
 
 	var written int64
 	err = withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
+		// Each attempt rewrites from the start (seek+truncate below), so no O_TRUNC
+		// on open is needed.
 		attemptCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		req, rerr := http.NewRequestWithContext(attemptCtx, http.MethodGet, opt.URL, nil)

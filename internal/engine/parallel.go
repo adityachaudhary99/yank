@@ -104,9 +104,9 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 			defer wg.Done()
 			defer func() { <-sem }()
 			src := pool[c.index%len(pool)]
-			err := fetchChunk(gctx, opt, src, f, c, prog, report, lim)
+			err := fetchChunk(gctx, opt, src, f, c, prog, report, lim, meta.Size)
 			if err != nil && src != opt.URL && gctx.Err() == nil {
-				err = fetchChunk(gctx, opt, opt.URL, f, c, prog, report, lim) // mirror failed → primary
+				err = fetchChunk(gctx, opt, opt.URL, f, c, prog, report, lim, meta.Size) // mirror failed → primary
 			}
 			if err != nil {
 				mu.Lock()
@@ -157,8 +157,10 @@ func planChunks(size int64, n int) []chunk {
 // fetchChunk downloads chunk c into f from url, resuming from prog[c.index] bytes
 // already written. offset is kept across retries (in the closure) so a mid-chunk
 // failure continues rather than re-downloading. report and prog are advanced per
-// write. url is the chunk's assigned source (primary or a mirror).
-func fetchChunk(ctx context.Context, opt Options, url string, f *os.File, c chunk, prog []int64, report func(int), lim *throttle) error {
+// write. url is the chunk's assigned source (primary or a mirror); total is the
+// expected file size, used to reject a mirror serving a different-sized (wrong)
+// file even when it honors the byte range.
+func fetchChunk(ctx context.Context, opt Options, url string, f *os.File, c chunk, prog []int64, report func(int), lim *throttle, total int64) error {
 	offset := c.start + prog[c.index]
 	return withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
 		if offset > c.end {
@@ -192,6 +194,12 @@ func fetchChunk(ctx context.Context, opt Options, url string, f *os.File, c chun
 		// file, since we WriteAt the body bytes at `offset`. Reject it.
 		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
 			return Permanent(fmt.Errorf("server returned wrong range for bytes=%d-%d: %q", offset, c.end, resp.Header.Get("Content-Range")))
+		}
+		// A mirror must be the same file: if it reports a different total size, its
+		// bytes would corrupt the assembly (we WriteAt at the primary's offsets).
+		// Reject it (the chunk then falls back to the primary URL). 0 = unknown ("*").
+		if tot := contentRangeTotal(resp.Header.Get("Content-Range")); tot != 0 && tot != total {
+			return Permanent(fmt.Errorf("source %s reports size %d, expected %d (mirror may be a different file)", url, tot, total))
 		}
 		body := newStallReader(resp.Body, cancel, opt.StallTimeout)
 		defer body.Stop()

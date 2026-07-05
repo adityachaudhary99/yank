@@ -201,13 +201,28 @@ func downloadWithMirrors(ctx context.Context, cmd *cobra.Command, f *downloadFla
 		if i > 0 {
 			cmd.PrintErrln("yank: primary failed; trying mirror", c)
 		}
-		if err := downloadOne(ctx, cmd, ft, c, passthrough, nil); err == nil {
+		// Segment across all the other sources with c as the primary, so a
+		// promoted mirror still gets the original primary (and the rest) in its pool.
+		attempt := *ft
+		attempt.mirrors = others(candidates, i)
+		if err := downloadOne(ctx, cmd, &attempt, c, passthrough, nil); err == nil {
 			return nil
 		} else {
 			lastErr = err
 		}
 	}
 	return lastErr
+}
+
+// others returns s without the element at index skip.
+func others(s []string, skip int) []string {
+	out := make([]string, 0, len(s))
+	for i, v := range s {
+		if i != skip {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // downloadConcurrent runs the URL list through a worker pool of f.jobs, sharing a
@@ -633,6 +648,9 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		}
 		if f.output == "-" {
 			return usageErrf("--range is not supported with -o - (stdout)")
+		}
+		if sum != "" {
+			return usageErrf("--checksum/--checksums is not supported with --range (it would verify only the partial range)")
 		}
 	}
 	if f.output == "-" { // stream to stdout (single stream, no resume/checksum)

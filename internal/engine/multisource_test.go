@@ -99,3 +99,46 @@ func TestParallelMultiSourceMirrorFallback(t *testing.T) {
 		t.Fatalf("file mismatch after mirror fallback: got %d bytes, want %d", len(got), len(body))
 	}
 }
+
+// A mirror that honors the byte range but reports a different total size (i.e.
+// it's a different file) must be rejected, with its chunks falling back to the
+// primary — so the assembled file is still correct, never corrupted.
+func TestParallelMultiSourceRejectsWrongSizeMirror(t *testing.T) {
+	body := bytes.Repeat([]byte("the-real-file"), 200_000)
+	serveRange := func(w http.ResponseWriter, r *http.Request, src []byte, reportTotal int) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("ETag", `"v1"`)
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			return
+		}
+		var start, end int64
+		fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-%d", &start, &end)
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, reportTotal))
+		w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(src[start : end+1])
+	}
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveRange(w, r, body, len(body))
+	}))
+	defer primary.Close()
+	// Honors the range, serves junk, and lies about the total size.
+	wrong := bytes.Repeat([]byte("X"), len(body))
+	badMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveRange(w, r, wrong, len(body)+999)
+	}))
+	defer badMirror.Close()
+
+	out := filepath.Join(t.TempDir(), "f.bin")
+	res, err := Download(context.Background(), Options{
+		URL: primary.URL, Mirrors: []string{badMirror.URL}, OutputPath: out,
+		Connections: 4, Retries: 1, Client: primary.Client(), Sink: progress.NewSilent(),
+	})
+	if err != nil {
+		t.Fatalf("a wrong-size mirror should be rejected and fall back, not fail: %v", err)
+	}
+	if got, _ := os.ReadFile(res.Path); !bytes.Equal(got, body) {
+		t.Fatalf("file corrupted by a wrong-size mirror: got %q…, want the real file", got[:16])
+	}
+}
