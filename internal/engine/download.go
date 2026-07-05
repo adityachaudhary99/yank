@@ -31,6 +31,7 @@ type Options struct {
 	Fresh        bool          // ignore any partial .part/state and restart from 0
 	Stdout       io.Writer     // when set, stream the body here (no file/resume/parallel)
 	Range        string        // HTTP byte-range spec (e.g. "0-1023"); single-stream, no resume
+	Mirrors      []string      // alternate URLs for the same file; chunks are spread across them
 }
 
 // Result reports what was downloaded.

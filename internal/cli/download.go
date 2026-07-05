@@ -656,6 +656,7 @@ func nativeGet(ctx context.Context, cmd *cobra.Command, f *downloadFlags, raw st
 		Fresh:   f.fresh || f.noResume,
 		Headers: hdr, Sink: sink, Checksum: sum, Client: client,
 		StallTimeout: f.timeout, RateLimit: rate, Range: f.rangeSpec,
+		Mirrors: mirrorsFor(f, raw),
 	})
 	if err != nil {
 		return err
@@ -820,6 +821,23 @@ func printVerbose(cmd *cobra.Command, f *downloadFlags, src classify.Source, pas
 			fmt.Fprintf(w, "yank: command %v\n", argv)
 		}
 	}
+}
+
+// mirrorsFor returns the segmentation mirror pool for the current source URL:
+// f.mirrors with raw removed (raw is already the primary in the engine's pool),
+// so no URL is listed twice — including when the mirror-fallback loop promotes a
+// mirror to the primary.
+func mirrorsFor(f *downloadFlags, raw string) []string {
+	if len(f.mirrors) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(f.mirrors))
+	for _, m := range f.mirrors {
+		if m != raw {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // validRangeSpec reports whether s is an HTTP byte-range spec yank accepts:

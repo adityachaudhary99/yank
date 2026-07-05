@@ -82,6 +82,11 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		lim = newThrottle(opt.RateLimit, time.Now)
 	}
 
+	// Source pool: the primary URL plus any mirrors. Chunks are spread across the
+	// pool (segmented multi-source) so a large file downloads from several servers
+	// at once; if a chunk's mirror fails, it falls back to the primary URL.
+	pool := append([]string{opt.URL}, opt.Mirrors...)
+
 	gctx, cancelGroup := context.WithCancel(ctx)
 	defer cancelGroup()
 	sem := make(chan struct{}, opt.Connections)
@@ -98,7 +103,12 @@ func downloadParallel(ctx context.Context, opt Options, meta *Meta, out string) 
 		go func(c chunk) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := fetchChunk(gctx, opt, f, c, prog, report, lim); err != nil {
+			src := pool[c.index%len(pool)]
+			err := fetchChunk(gctx, opt, src, f, c, prog, report, lim)
+			if err != nil && src != opt.URL && gctx.Err() == nil {
+				err = fetchChunk(gctx, opt, opt.URL, f, c, prog, report, lim) // mirror failed → primary
+			}
+			if err != nil {
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
@@ -144,10 +154,11 @@ func planChunks(size int64, n int) []chunk {
 	return chunks
 }
 
-// fetchChunk downloads chunk c into f, resuming from prog[c.index] bytes already
-// written. offset is kept across retries (in the closure) so a mid-chunk failure
-// continues rather than re-downloading. report and prog are advanced per write.
-func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []int64, report func(int), lim *throttle) error {
+// fetchChunk downloads chunk c into f from url, resuming from prog[c.index] bytes
+// already written. offset is kept across retries (in the closure) so a mid-chunk
+// failure continues rather than re-downloading. report and prog are advanced per
+// write. url is the chunk's assigned source (primary or a mirror).
+func fetchChunk(ctx context.Context, opt Options, url string, f *os.File, c chunk, prog []int64, report func(int), lim *throttle) error {
 	offset := c.start + prog[c.index]
 	return withRetry(ctx, opt.Retries, 300*time.Millisecond, func() error {
 		if offset > c.end {
@@ -155,7 +166,7 @@ func fetchChunk(ctx context.Context, opt Options, f *os.File, c chunk, prog []in
 		}
 		attemptCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, opt.URL, nil)
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, url, nil)
 		if err != nil {
 			return err
 		}
