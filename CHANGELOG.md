@@ -20,6 +20,14 @@ post-download hook, and the wrapper escape hatch documented at last.
 - **Output-name templating** — `-o` accepts a template (`%(name)s`, `%(ext)s`,
   `%(filename)s`, `%(host)s`) expanded per URL, so it's valid with multiple URLs:
   `yank -i urls.txt -d out -o '%(host)s_%(name)s.%(ext)s'`.
+- **Per-URL options in `-i` files** — indent `out=`, `dir=`, `checksum=` under a
+  URL (aria2-style) to override that download only. Plain one-URL-per-line files
+  are unchanged.
+- **`--range start-end | start- | -count`** — download only a byte range
+  (single-stream); a server that ignores the range is a clear error.
+- **Segmented multi-source** — `--mirror` now splits a large file's chunks across
+  the primary and every mirror in parallel (not just fallback); a failed mirror
+  chunk falls back to the primary.
 - **`--accessible`** and the **`ACCESSIBLE`** environment variable — turn on plain
   mode for screen readers (mirrors `gh` / Charm `huh`). Plain mode is also
   selected automatically in CI (`CI` set) and on a dumb terminal (`TERM=dumb`).

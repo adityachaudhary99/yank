@@ -87,8 +87,9 @@ yank [flags] <url>...
       --bearer <token>     bearer token
       --cookies <file>     send a Netscape cookie jar with requests
       --netrc              use ~/.netrc (or $NETRC) for host credentials
-      --mirror <url>       alternate URL for the same file, tried on failure (repeatable)
+      --mirror <url>       another source for the same file: chunks are split across all sources (repeatable)
       --exec <cmd>         run a command after each download ({} = the file path)
+      --range <spec>       download only a byte range: start-end, start-, or -count
       --json               newline-delimited JSON progress events
       --no-parallel        force a single connection
       --limit-rate <rate>  cap the download rate, e.g. 500k or 1M
@@ -131,6 +132,13 @@ yank https://a/x.bin https://b/y.bin -d ./downloads
 yank -i urls.txt -d ./downloads
 grep -o 'https://[^"]*' page.html | yank -i -
 
+# an -i file may carry per-URL options, indented under each URL (aria2-style):
+#   https://host/a.bin
+#       out=renamed.bin
+#       checksum=sha256:abc...
+#   https://host/b.bin
+#       dir=other
+
 # ...and fetch them 4 at a time
 yank -i urls.txt -d ./downloads -j 4
 
@@ -144,8 +152,12 @@ yank -i urls.txt -d ./pkgs --exec 'sha256sum'
 # name each file from a template (valid with many URLs; %(name)s/%(ext)s/%(host)s)
 yank -i urls.txt -d ./out -o '%(host)s_%(name)s.%(ext)s'
 
-# one file with fallback mirrors — tried in order until one works
+# one file from several mirrors — chunks split across all sources in parallel
+# (a dead mirror's chunks fall back to the primary)
 yank https://main.example/app.tar.gz --mirror https://mirror1/app.tar.gz --mirror https://mirror2/app.tar.gz
+
+# grab just the first 1 KiB (curl -r parity)
+yank https://example.com/big.iso --range 0-1023 -o head.bin
 
 # script-friendly progress — works the same for a dispatched backend
 yank --json https://example.com/big.iso | jq -c .
